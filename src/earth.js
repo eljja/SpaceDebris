@@ -21,13 +21,22 @@ export class Earth {
 
   _initEarth() {
     const geo = new THREE.SphereGeometry(this.radius, 64, 64);
+    
+    const textureLoader = new THREE.TextureLoader();
     const mat = new THREE.MeshPhongMaterial({
-      color: 0x1a3a5c,
-      emissive: 0x0a1628,
-      shininess: 15,
-      flatShading: false
+      map: textureLoader.load('./data/textures/earth-blue-marble.jpg'),
+      specularMap: textureLoader.load('./data/textures/earth-water.png'),
+      bumpMap: textureLoader.load('./data/textures/earth-topology.png'),
+      bumpScale: 5,
+      specular: new THREE.Color('grey'),
+      shininess: 35
     });
+    
     this._earthMesh = new THREE.Mesh(geo, mat);
+    
+    // Tilt the Earth slightly (axial tilt ~23.5 degrees)
+    this._earthMesh.rotation.z = 23.5 * Math.PI / 180;
+    
     this.group.add(this._earthMesh);
   }
 

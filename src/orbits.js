@@ -158,10 +158,10 @@ export class OrbitRenderer {
       }
       validColors.push(color);
 
-      // Scale by RCS size (set by DataLoader as rcsSize)
-      let scale = 15;
-      if (obj.rcsSize === 'LARGE') scale = 40;
-      else if (obj.rcsSize === 'MEDIUM') scale = 25;
+      // Scale by RCS size (set by DataLoader as rcsSize) - halved as requested
+      let scale = 7.5; // small
+      if (obj.rcsSize === 'LARGE') scale = 20;
+      else if (obj.rcsSize === 'MEDIUM') scale = 12.5;
       this.scales.push(scale);
     }
 

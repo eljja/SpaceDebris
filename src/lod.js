@@ -57,15 +57,13 @@ export class LODController {
       const rcs = obj.rcsSize; // 'LARGE', 'MEDIUM', 'SMALL', or 'UNK'
 
       switch (this.currentLevel) {
-        case 1: // Only LARGE
-          lodOk = (rcs === 'LARGE');
-          break;
-        case 2: // LARGE + MEDIUM
+        case 1: // Only LARGE and MEDIUM at furthest distance
           lodOk = (rcs === 'LARGE' || rcs === 'MEDIUM');
           break;
-        case 3: // All except small debris
+        case 2: // All except small debris
           lodOk = !(obj.category === 'debris' && rcs === 'SMALL');
           break;
+        case 3: // ALL
         case 4: // ALL
         default:
           lodOk = true;

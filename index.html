@@ -190,6 +190,18 @@
         </div>
       </div>
 
+      <!-- Simulation Controls -->
+      <div class="panel-section">
+        <h3>Simulation Engine</h3>
+        <div class="control-group">
+          <label class="control-label">Injection Particles</label>
+          <input type="number" id="input-particle-count" value="50" min="1" max="1000" class="search-box" style="width:100%; padding: 8px;" />
+          <button class="btn btn-outline glow-amber" id="btn-enable-drag" style="width:100%; margin-top:10px;">
+            <i data-lucide="crosshair"></i> Drag to Inject Debris
+          </button>
+        </div>
+      </div>
+
       <!-- Data Info -->
       <div class="panel-section data-info">
         <h3>Data Source</h3>
@@ -306,6 +318,10 @@
             <span class="detail-val" id="detail-vel">—</span>
           </div>
         </div>
+
+        <button class="btn btn-outline glow-purple" id="btn-explode-target" style="width:100%; margin-top:20px;">
+          <i data-lucide="bomb"></i> 💥 Explode Satellite
+        </button>
       </div>
     </aside>
 

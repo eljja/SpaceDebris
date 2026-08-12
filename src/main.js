@@ -150,6 +150,17 @@ class SpaceDebrisApp {
       this.sceneManager.getControls().enabled = false;
     });
 
+    // Targeted explosion
+    document.getElementById('btn-explode-target')?.addEventListener('click', () => {
+      if (this.selectedIndex !== -1) {
+        const countInput = document.getElementById('input-particle-count');
+        const count = countInput ? parseInt(countInput.value, 10) || 50 : 50;
+        this.simController.explodeObject(this.selectedIndex, count);
+        // Clear selection since object is "destroyed"
+        this._selectObject(-1);
+      }
+    });
+
     // Sound toggle
     document.getElementById('btn-toggle-sound')?.addEventListener('click', () => {
       const muted = this.simController.sound.toggleMute();

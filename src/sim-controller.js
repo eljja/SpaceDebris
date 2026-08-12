@@ -43,9 +43,24 @@ export class SimulationController {
   bindEvents() {
     // 1. Placer Drag Launch Callback
     this.placer.onLaunch = (particleData) => {
-      this.simulator.addParticle(particleData);
+      const countInput = document.getElementById('input-particle-count');
+      const count = countInput ? parseInt(countInput.value, 10) || 1 : 1;
+      
+      for (let i = 0; i < count; i++) {
+        // Slight random variation in velocity for multiple particles
+        const vvx = particleData.velocity.vx + (Math.random() - 0.5) * 0.5;
+        const vvy = particleData.velocity.vy + (Math.random() - 0.5) * 0.5;
+        const vvz = particleData.velocity.vz + (Math.random() - 0.5) * 0.5;
+        
+        this.simulator.addParticle({
+          position: { ...particleData.position },
+          velocity: { vx: vvx, vy: vvy, vz: vvz },
+          mass: particleData.mass || 10
+        });
+      }
+      
       this.sound.playDebrisLaunch();
-      this.uiManager.setStatus(`Launched debris particle at ${Math.round(Math.sqrt(particleData.position.x**2 + particleData.position.y**2 + particleData.position.z**2) - 6371)} km`);
+      this.uiManager.setStatus(`Launched ${count} debris particles!`);
     };
 
     // 2. Numerical Launch Callback
@@ -122,5 +137,38 @@ export class SimulationController {
   toggleSimMode() {
     this.setSimActive(!this.simActive);
     return this.simActive;
+  }
+
+  explodeObject(index, fragmentCount = 50) {
+    if (!this.orbitRenderer) return;
+    
+    // Get position of the satellite from SGP4
+    const posVector = this.orbitRenderer.getObjectPosition(index);
+    if (!posVector) return;
+
+    // We don't have accurate instantaneous velocity easily from SGP4 without 
+    // re-evaluating it. Let's just create a generic orbital velocity tangent to position.
+    const r = posVector.length();
+    const vMag = Math.sqrt(398600 / r); // roughly circular orbit velocity
+    // Cross product with up vector to get tangent
+    const up = new THREE.Vector3(0, 1, 0);
+    let tangent = new THREE.Vector3().crossVectors(posVector, up).normalize();
+    if (tangent.lengthSq() < 0.1) tangent.set(1, 0, 0); // fallback
+    tangent.multiplyScalar(vMag);
+
+    const pos = { x: posVector.x, y: posVector.y, z: posVector.z };
+    const vel = { vx: tangent.x, vy: tangent.y, vz: tangent.z };
+
+    // Enable sim mode if not active
+    if (!this.simActive) {
+      this.setSimActive(true);
+      document.getElementById('btn-toggle-sim')?.click();
+    }
+
+    // Trigger fragmentation
+    this.simulator.triggerExplosion(pos, vel, fragmentCount, 1.5);
+    this.vfx.triggerExplosion(pos, 1.5);
+    this.sound.playExplosion(1.5);
+    this.uiManager.setStatus(`💥 TARGET DESTROYED! ${fragmentCount} fragments generated!`);
   }
 }
