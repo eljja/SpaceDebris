@@ -1,116 +1,104 @@
+/**
+ * SpaceDebris — Level-of-Detail Controller
+ * Manages camera-distance-based LOD filtering and user category/orbit-type filters.
+ * Uses field names set by DataLoader: obj.category, obj.orbitType, obj.rcsSize
+ */
+
 export class LODController {
-    constructor(dataLoader, orbitRenderer) {
-        this.dataLoader = dataLoader;
-        this.orbitRenderer = orbitRenderer;
-        
-        this.objects = this.dataLoader.getObjects() || [];
-        this.currentLevel = -1;
-        
-        this.activeFilters = {
-            category: null, // null means all, otherwise array of allowed values
-            orbitType: null
-        };
-        
-        this.visibleIndices = [];
+  constructor(dataLoader, orbitRenderer) {
+    this.dataLoader = dataLoader;
+    this.orbitRenderer = orbitRenderer;
+
+    this.objects = this.dataLoader.getObjects() || [];
+    this.currentLevel = -1;
+
+    // Filters: null = show all; array = show only listed values
+    this.activeFilters = {
+      category: null,
+      orbitType: null
+    };
+
+    this.visibleIndices = [];
+  }
+
+  update(cameraDistance) {
+    let newLevel;
+    if (cameraDistance > 50000) {
+      newLevel = 1;
+    } else if (cameraDistance > 20000) {
+      newLevel = 2;
+    } else if (cameraDistance > 5000) {
+      newLevel = 3;
+    } else {
+      newLevel = 4;
     }
-    
-    update(cameraDistance) {
-        let newLevel = 1;
-        if (cameraDistance > 50000) {
-            newLevel = 1;
-        } else if (cameraDistance > 20000) {
-            newLevel = 2;
-        } else if (cameraDistance > 5000) {
-            newLevel = 3;
-        } else {
-            newLevel = 4;
-        }
-        
-        // We only recalculate if the level changed (or if filters changed, which should be called separately)
-        if (newLevel !== this.currentLevel) {
-            this.currentLevel = newLevel;
-            this.recalculateVisibleObjects();
-        }
+
+    if (newLevel !== this.currentLevel) {
+      this.currentLevel = newLevel;
+      this._recalculate();
     }
-    
-    setFilter(filterType, values) {
-        if (this.activeFilters[filterType] !== undefined) {
-            this.activeFilters[filterType] = values;
-            this.recalculateVisibleObjects();
-        }
+  }
+
+  setFilter(filterType, values) {
+    if (filterType in this.activeFilters) {
+      this.activeFilters[filterType] = values && values.length > 0 ? values : null;
+      this._recalculate();
     }
-    
-    recalculateVisibleObjects() {
-        this.visibleIndices = [];
-        
-        for (let i = 0; i < this.objects.length; i++) {
-            const obj = this.objects[i];
-            
-            // 1. Check LOD distance rules
-            let allowedByLOD = false;
-            
-            if (this.currentLevel === 1) {
-                // Level 1: Only RCS LARGE objects
-                allowedByLOD = (obj.RCS_SIZE === 'LARGE');
-            } else if (this.currentLevel === 2) {
-                // Level 2: RCS LARGE + MEDIUM
-                allowedByLOD = (obj.RCS_SIZE === 'LARGE' || obj.RCS_SIZE === 'MEDIUM');
-            } else if (this.currentLevel === 3) {
-                // Level 3: All objects EXCEPT small debris
-                const isSmallDebris = (obj.OBJECT_TYPE === 'DEBRIS' && obj.RCS_SIZE === 'SMALL');
-                allowedByLOD = !isSmallDebris;
-            } else if (this.currentLevel === 4) {
-                // Level 4: ALL objects
-                allowedByLOD = true;
-            }
-            
-            if (!allowedByLOD) continue;
-            
-            // 2. Check Filters
-            let allowedByFilter = true;
-            
-            if (this.activeFilters.category && this.activeFilters.category.length > 0) {
-                if (!this.activeFilters.category.includes(obj.OBJECT_TYPE)) {
-                    allowedByFilter = false;
-                }
-            }
-            
-            // Assuming orbitType mapping could be added here if there was an ORBIT_TYPE field
-            if (this.activeFilters.orbitType && this.activeFilters.orbitType.length > 0) {
-                const orbType = obj.ORBIT_TYPE || this.deriveOrbitType(obj);
-                if (!this.activeFilters.orbitType.includes(orbType)) {
-                    allowedByFilter = false;
-                }
-            }
-            
-            if (allowedByFilter) {
-                this.visibleIndices.push(i);
-            }
-        }
-        
-        this.orbitRenderer.setVisibleObjects(this.visibleIndices);
+  }
+
+  _recalculate() {
+    this.visibleIndices = [];
+
+    for (let i = 0; i < this.objects.length; i++) {
+      const obj = this.objects[i];
+
+      // 1. LOD distance check using rcsSize (set by DataLoader)
+      let lodOk = false;
+      const rcs = obj.rcsSize; // 'LARGE', 'MEDIUM', 'SMALL', or 'UNK'
+
+      switch (this.currentLevel) {
+        case 1: // Only LARGE
+          lodOk = (rcs === 'LARGE');
+          break;
+        case 2: // LARGE + MEDIUM
+          lodOk = (rcs === 'LARGE' || rcs === 'MEDIUM');
+          break;
+        case 3: // All except small debris
+          lodOk = !(obj.category === 'debris' && rcs === 'SMALL');
+          break;
+        case 4: // ALL
+        default:
+          lodOk = true;
+          break;
+      }
+
+      if (!lodOk) continue;
+
+      // 2. Category filter (uses obj.category: 'active', 'dead', 'rocket', 'debris', 'unknown')
+      if (this.activeFilters.category) {
+        if (!this.activeFilters.category.includes(obj.category)) continue;
+      }
+
+      // 3. Orbit type filter (uses obj.orbitType: 'LEO', 'MEO', 'GEO', 'HEO')
+      if (this.activeFilters.orbitType) {
+        if (!this.activeFilters.orbitType.includes(obj.orbitType)) continue;
+      }
+
+      this.visibleIndices.push(i);
     }
-    
-    deriveOrbitType(obj) {
-        // Fallback method to determine orbit type if not explicitly provided
-        // based on mean motion or period.
-        const meanMotion = obj.MEAN_MOTION || 0;
-        // Period in minutes = 1440 / mean motion
-        if (meanMotion > 11.25) return 'LEO'; // < 128 min
-        if (meanMotion > 1.5) return 'MEO';
-        if (meanMotion > 0.9 && meanMotion < 1.1) return 'GEO';
-        return 'HEO'; // Default fallback for highly elliptical
-    }
-    
-    getCurrentLevel() {
-        return this.currentLevel;
-    }
-    
-    getVisibleCount() {
-        return this.visibleIndices.length;
-    }
-    
-    getVisibleIndices() {
-        return this.visibleIndices;
-    }
+
+    this.orbitRenderer.setVisibleObjects(this.visibleIndices);
+  }
+
+  getCurrentLevel() {
+    return this.currentLevel;
+  }
+
+  getVisibleCount() {
+    return this.visibleIndices.length;
+  }
+
+  getVisibleIndices() {
+    return this.visibleIndices;
+  }
 }

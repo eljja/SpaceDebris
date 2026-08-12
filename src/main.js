@@ -1,6 +1,7 @@
 /**
  * SpaceDebris — Main Application Entry Point
- * Coordinates 3D Scene, Data Loader, Orbit Renderer, LOD Controller, and UI.
+ * Coordinates 3D Scene, Data Loader, Orbit Renderer, LOD Controller,
+ * PostProcessing, Simulation Engine, and UI.
  */
 
 import { SceneManager } from './scene.js';
@@ -24,7 +25,7 @@ class SpaceDebrisApp {
     this.simController = null;
 
     this.simDate = new Date();
-    this.timeSpeed = 1; // 1x real-time
+    this.timeSpeed = 1;
     this.lastFrameTime = performance.now();
     this.selectedIndex = -1;
 
@@ -33,182 +34,167 @@ class SpaceDebrisApp {
 
   async init() {
     try {
-      // 1. Initialize UI
+      // ── 1. UI Manager ──────────────────────────────────────────
       this.ui = new UIManager();
       this.ui.setStatus('Initializing 3D Viewport...', true);
 
-      // 2. Initialize 3D Scene
+      // ── 2. 3D Scene ────────────────────────────────────────────
       const container = document.getElementById('viewport-container');
       this.sceneManager = new SceneManager(container);
+
       this.earth = new Earth();
       this.sceneManager.getScene().add(this.earth.getMesh());
 
-      // Post Processing HDR Bloom
+      // ── 3. PostProcessing (HDR Bloom) ──────────────────────────
       this.postProcessing = new PostProcessingManager(
         this.sceneManager.getRenderer(),
         this.sceneManager.getScene(),
         this.sceneManager.getCamera()
       );
 
-      // 3. Initialize Data Loader
+      // ── 4. Load Orbital Data ───────────────────────────────────
       this.dataLoader = new DataLoader();
-      
-      // Load data with progress reporting
+
       await this.dataLoader.loadAll((loaded, total, message) => {
         const progress = total > 0 ? loaded / total : 0;
         this.ui.updateLoading(progress, message);
       });
 
-      this.ui.updateLoading(0.9, 'Building 3D Orbital Instances...');
+      this.ui.updateLoading(0.85, 'Building SGP4 propagation records...');
 
-      // 4. Initialize Orbit Renderer
+      // ── 5. Orbit Renderer (SGP4) ───────────────────────────────
       this.orbitRenderer = new OrbitRenderer(
         this.sceneManager.getScene(),
         this.dataLoader
       );
 
-      // 5. Initialize LOD Controller
+      this.ui.updateLoading(0.92, 'Initializing LOD controller...');
+
+      // ── 6. LOD Controller ──────────────────────────────────────
       this.lodController = new LODController(
         this.dataLoader,
         this.orbitRenderer
       );
+      this.lodController.update(this.sceneManager.getCameraDistance());
 
-      // Initial LOD update
-      const initialDist = this.sceneManager.getCameraDistance();
-      this.lodController.update(initialDist);
-
-      // 6. Initialize Simulation Engine & VFX
+      // ── 7. Simulation Engine ───────────────────────────────────
       this.simController = new SimulationController(
         this.sceneManager,
         this.orbitRenderer,
         this.ui
       );
 
-      // Header Button Bindings
-      document.getElementById('btn-toggle-sim')?.addEventListener('click', () => {
-        const active = this.simController.toggleSimMode();
-        this.ui.setStatus(active ? 'Simulation Engine ACTIVE' : 'Tracking Live Orbits', true);
-      });
+      // ── 8. UI Bindings ─────────────────────────────────────────
+      this._bindUI();
 
-      document.getElementById('btn-enable-drag')?.addEventListener('click', () => {
-        this.simController.placer.setActive(true);
-        this.ui.setStatus('3D Drag Placer Active — Click on Globe to place', true);
-      });
+      // ── 9. Launch Render Loop ──────────────────────────────────
+      this.ui.updateLoading(1.0, 'All systems go!');
+      setTimeout(() => {
+        this.ui.hideLoading();
+        this.ui.setStatus('Tracking Live Orbits', true);
+      }, 400);
 
-      document.getElementById('btn-toggle-sound')?.addEventListener('click', () => {
-        const muted = this.simController.sound.toggleMute();
-        const icon = document.getElementById('icon-sound');
-        if (icon) {
-          icon.setAttribute('data-lucide', muted ? 'volume-x' : 'volume-2');
-          if (window.lucide) window.lucide.createIcons();
-        }
-      });
-
-      // 7. Setup UI Info & Callbacks
-      const metadata = this.dataLoader.getMetadata();
-      this.ui.setMetadataInfo(metadata);
-
-      // Category counts for filter UI
-      const objects = this.dataLoader.getObjects();
-      const counts = { active: 0, dead: 0, rocket: 0, debris: 0 };
-      objects.forEach(obj => {
-        if (counts[obj.category] !== undefined) counts[obj.category]++;
-      });
-      this.ui.setObjectCounts(counts);
-
-      // Bind Filter Callbacks
-      this.ui.onFilterChange = (filters) => {
-        this.lodController.setFilter('category', filters.categories);
-        this.lodController.setFilter('orbitType', filters.orbitTypes);
-        this.lodController.update(this.sceneManager.getCameraDistance());
-        this.updateMetrics();
-      };
-
-      // Bind Speed Callback
-      this.ui.onSpeedChange = (speed) => {
-        this.timeSpeed = speed;
-      };
-
-      // Bind Search Query Callback
-      this.ui.onSearchQuery = (query) => {
-        return this.dataLoader.search(query);
-      };
-
-      // Bind Search Selection
-      this.ui.onSearchSelect = (obj) => {
-        const idx = objects.indexOf(obj);
-        if (idx !== -1) {
-          this.selectObject(idx);
-        }
-      };
-
-      // 8. Raycaster Click Selection
-      const domElement = this.sceneManager.getRenderer().domElement;
-      domElement.addEventListener('pointerdown', (e) => {
-        this.pointerDownPos = { x: e.clientX, y: e.clientY };
-      });
-
-      domElement.addEventListener('pointerup', (e) => {
-        if (!this.pointerDownPos) return;
-        const dx = Math.abs(e.clientX - this.pointerDownPos.x);
-        const dy = Math.abs(e.clientY - this.pointerDownPos.y);
-        if (dx > 5 || dy > 5) return; // Ignore drag/pan
-
-        if (this.simController.placer.active) return; // Ignore selection during drag launch
-
-        const rect = domElement.getBoundingClientRect();
-        const screenPos = {
-          x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
-          y: -((e.clientY - rect.top) / rect.height) * 2 + 1
-        };
-
-        const clickedIdx = this.orbitRenderer.getObjectAtScreenPosition(
-          screenPos,
-          this.sceneManager.getCamera()
-        );
-
-        if (clickedIdx !== null) {
-          this.selectObject(clickedIdx);
-        }
-      });
-
-      // 9. Add Main Render Loop Callback
-      this.sceneManager.addToRenderLoop((delta) => {
-        this.update(delta);
-      });
-
-      // Hide loading screen
-      this.ui.updateLoading(1.0, 'Ready!');
-      this.ui.hideLoading();
-      this.ui.setStatus('Tracking Live Orbits', true);
-
-      // Override scene animate with PostProcessing render
-      this.sceneManager.animate = () => {
-        requestAnimationFrame(() => this.sceneManager.animate());
-        const delta = this.sceneManager.clock.getDelta();
-
-        for (const cb of this.sceneManager.renderCallbacks) {
-          cb(delta);
-        }
-
-        this.sceneManager.controls.update();
-        this.postProcessing.render();
-      };
-
-      // Start Scene Loop
-      this.sceneManager.animate();
+      this._startRenderLoop();
 
     } catch (err) {
-      console.error('[App Init Error]', err);
-      this.ui.updateLoading(0, `Error: ${err.message}`);
+      console.error('[SpaceDebris Init Error]', err);
+      if (this.ui) {
+        this.ui.updateLoading(0, `Error: ${err.message}`);
+      }
     }
   }
 
-  selectObject(index) {
-    this.selectedIndex = index;
-    const objects = this.dataLoader.getObjects();
-    const obj = objects[index];
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  UI Bindings
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  _bindUI() {
+    const metadata = this.dataLoader.getMetadata();
+    this.ui.setMetadataInfo(metadata);
 
+    // Category counts
+    const objects = this.dataLoader.getObjects();
+    const counts = { active: 0, dead: 0, rocket: 0, debris: 0, unknown: 0 };
+    objects.forEach(obj => {
+      if (obj.category in counts) counts[obj.category]++;
+    });
+    this.ui.setObjectCounts(counts);
+
+    // Filter change
+    this.ui.onFilterChange = ({ categories, orbitTypes }) => {
+      this.lodController.setFilter('category', categories);
+      this.lodController.setFilter('orbitType', orbitTypes);
+      this.lodController.update(this.sceneManager.getCameraDistance());
+      this._updateMetrics();
+    };
+
+    // Speed
+    this.ui.onSpeedChange = (speed) => { this.timeSpeed = speed; };
+
+    // Search
+    this.ui.onSearchQuery = (query) => this.dataLoader.search(query);
+    this.ui.onSearchSelect = (obj) => {
+      const idx = objects.indexOf(obj);
+      if (idx !== -1) this._selectObject(idx);
+    };
+
+    // Sim Engine toggle
+    document.getElementById('btn-toggle-sim')?.addEventListener('click', () => {
+      const active = this.simController.toggleSimMode();
+      this.ui.setStatus(active ? 'Simulation Engine ACTIVE' : 'Tracking Live Orbits', true);
+    });
+
+    // Drag launch activation (inside sim panel)
+    document.getElementById('btn-enable-drag')?.addEventListener('click', () => {
+      this.simController.placer.setActive(true);
+      // Disable OrbitControls so drag goes to placer
+      this.sceneManager.getControls().enabled = false;
+    });
+
+    // Sound toggle
+    document.getElementById('btn-toggle-sound')?.addEventListener('click', () => {
+      const muted = this.simController.sound.toggleMute();
+      const icon = document.getElementById('icon-sound');
+      if (icon) {
+        icon.setAttribute('data-lucide', muted ? 'volume-x' : 'volume-2');
+        if (window.lucide) window.lucide.createIcons();
+      }
+    });
+
+    // Raycaster click-selection
+    const canvas = this.sceneManager.getRenderer().domElement;
+    let pointerDown = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      pointerDown = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (!pointerDown) return;
+      const dx = Math.abs(e.clientX - pointerDown.x);
+      const dy = Math.abs(e.clientY - pointerDown.y);
+      if (dx > 5 || dy > 5) return; // was a drag
+
+      if (this.simController?.placer?.active) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const ndc = {
+        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((e.clientY - rect.top) / rect.height) * 2 + 1
+      };
+
+      const hit = this.orbitRenderer.getObjectAtScreenPosition(
+        ndc, this.sceneManager.getCamera()
+      );
+      if (hit !== null) {
+        this._selectObject(hit);
+      }
+    });
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  Selection
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  _selectObject(index) {
+    this.selectedIndex = index;
+    const obj = this.dataLoader.getObjects()[index];
     if (obj) {
       this.orbitRenderer.showOrbitPath(index);
       const pos = this.orbitRenderer.getObjectPosition(index);
@@ -219,37 +205,68 @@ class SpaceDebrisApp {
     }
   }
 
-  update(delta) {
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  Render Loop
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  _startRenderLoop() {
+    const clock = this.sceneManager.clock;
+    const controls = this.sceneManager.controls;
+    const starField = this.sceneManager._starField;
+
+    const loop = () => {
+      requestAnimationFrame(loop);
+
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // Star twinkle
+      if (starField?.material?.uniforms?.uTime) {
+        starField.material.uniforms.uTime.value = elapsed;
+      }
+
+      // App update (orbits, physics, UI)
+      this._update(delta);
+
+      controls.update();
+
+      // Render with HDR Bloom post-processing
+      this.postProcessing.render();
+    };
+
+    loop();
+  }
+
+  _update(delta) {
     // 1. Advance simulation time
     const now = performance.now();
-    const frameDeltaSec = (now - this.lastFrameTime) / 1000;
+    const frameDelta = Math.min((now - this.lastFrameTime) / 1000, 0.1); // Clamp to 100ms max
     this.lastFrameTime = now;
 
-    const simDeltaMs = frameDeltaSec * 1000 * this.timeSpeed;
+    const simDeltaMs = frameDelta * 1000 * this.timeSpeed;
     this.simDate = new Date(this.simDate.getTime() + simDeltaMs);
     this.ui.updateTime(this.simDate);
 
     // 2. Rotate Earth
-    this.earth.update(frameDeltaSec);
+    this.earth.update(frameDelta);
 
-    // 3. Propagate & Render Orbits
+    // 3. Propagate orbits via SGP4
     this.orbitRenderer.update(this.simDate);
 
-    // 4. Step Simulation Physics Controller
+    // 4. Step physics simulation (if active)
     if (this.simController) {
-      this.simController.update(frameDeltaSec);
+      this.simController.update(frameDelta);
     }
 
-    // 5. Update LOD on camera distance change
+    // 5. LOD update
     const dist = this.sceneManager.getCameraDistance();
     this.lodController.update(dist);
 
-    // 6. Update Metrics & Selected Object Real-time Position
-    this.updateMetrics();
+    // 6. Metrics
+    this._updateMetrics();
 
+    // 7. Update selected object's live position
     if (this.selectedIndex !== -1) {
-      const objects = this.dataLoader.getObjects();
-      const obj = objects[this.selectedIndex];
+      const obj = this.dataLoader.getObjects()[this.selectedIndex];
       const pos = this.orbitRenderer.getObjectPosition(this.selectedIndex);
       if (obj && pos) {
         this.ui.showObjectDetails(obj, pos, null);
@@ -257,7 +274,7 @@ class SpaceDebrisApp {
     }
   }
 
-  updateMetrics() {
+  _updateMetrics() {
     const total = this.dataLoader.getObjects().length;
     const visible = this.lodController.getVisibleCount();
     const lodLevel = this.lodController.getCurrentLevel();
@@ -265,7 +282,7 @@ class SpaceDebrisApp {
   }
 }
 
-// Instantiate on DOM load
+// Launch
 window.addEventListener('DOMContentLoaded', () => {
   window.app = new SpaceDebrisApp();
 });

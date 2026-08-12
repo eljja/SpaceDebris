@@ -6,7 +6,6 @@
 export class UIManager {
   constructor() {
     // UI Elements
-    self = this;
     this.elements = {
       // Header
       metricTracked: document.getElementById('metric-tracked'),
