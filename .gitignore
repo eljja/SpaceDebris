@@ -1,0 +1,12 @@
+# OS / System
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Temp & Cache
+tmp/
+*.log
+.gemini/

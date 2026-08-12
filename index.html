@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpaceDebris — Orbital Debris Tracker &amp; Kessler Syndrome Simulator</title>
+  <meta name="description" content="Real-time 3D interactive space debris visualization with SGP4 orbital propagation, collision simulation, and Kessler syndrome modeling." />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="SpaceDebris — Orbital Debris Tracker" />
+  <meta property="og:description" content="Interactive 3D space debris orbital tracker with real CelesTrak data and Kessler syndrome physics simulation." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://eljja.github.io/SpaceDebris/" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Three.js + satellite.js + Lucide via importmap -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+        "satellite.js": "https://esm.sh/satellite.js@5.0.0"
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN (non-module) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+      <div class="loading-content">
+        <div class="loading-logo">
+          <div class="orbit-ring-lg"></div>
+          <div class="core-dot-lg"></div>
+        </div>
+        <h1>SPACE<span>DEBRIS</span></h1>
+        <p class="loading-subtitle">Loading orbital data...</p>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="loading-progress"></div>
+        </div>
+        <p class="loading-stats" id="loading-stats">Initializing...</p>
+      </div>
+    </div>
+
+    <!-- 3D Viewport Container -->
+    <div id="viewport-container"></div>
+
+    <!-- Header Bar -->
+    <header id="header" class="header-bar">
+      <div class="brand">
+        <div class="logo-icon-sm">
+          <div class="orbit-ring-sm"></div>
+          <div class="core-dot-sm"></div>
+        </div>
+        <div class="brand-text">
+          <h1>SPACE<span>DEBRIS</span></h1>
+        </div>
+      </div>
+
+      <div class="header-metrics">
+        <div class="metric-pill glow-cyan">
+          <span class="pill-label">Tracked</span>
+          <span class="pill-val" id="metric-tracked">—</span>
+        </div>
+        <div class="metric-pill glow-amber">
+          <span class="pill-label">Visible</span>
+          <span class="pill-val" id="metric-visible">—</span>
+        </div>
+        <div class="metric-pill glow-purple">
+          <span class="pill-label">LOD</span>
+          <span class="pill-val" id="metric-lod">—</span>
+        </div>
+        <div class="status-badge">
+          <span class="pulse-dot"></span>
+          <span id="status-text">LOADING</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn btn-outline glow-cyan" id="btn-toggle-sim" title="Simulation & Physics Engine">
+          <i data-lucide="zap"></i> Sim Engine
+        </button>
+        <button class="btn btn-icon" id="btn-toggle-sound" title="Toggle Audio">
+          <i data-lucide="volume-2" id="icon-sound"></i>
+        </button>
+        <button class="btn btn-icon" id="btn-toggle-left" title="Toggle Controls">
+          <i data-lucide="panel-left"></i>
+        </button>
+        <button class="btn btn-icon" id="btn-toggle-right" title="Toggle Details">
+          <i data-lucide="panel-right"></i>
+        </button>
+        <a href="https://github.com/eljja/SpaceDebris" target="_blank" rel="noopener noreferrer" class="btn btn-outline" title="GitHub">
+          <i data-lucide="github"></i>
+        </a>
+      </div>
+    </header>
+
+    <!-- Left Panel: Controls & Filters -->
+    <aside id="panel-left" class="panel panel-left glass-card">
+      <div class="panel-header">
+        <i data-lucide="sliders-horizontal"></i>
+        <h2>Controls &amp; Filters</h2>
+      </div>
+
+      <!-- Search -->
+      <div class="control-group">
+        <label class="control-label">Search Object</label>
+        <div class="search-box">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="search-input" placeholder="Name or NORAD ID..." />
+        </div>
+        <div id="search-results" class="search-results"></div>
+      </div>
+
+      <!-- Category Filter -->
+      <div class="control-group">
+        <label class="control-label">Object Category</label>
+        <div class="checkbox-list">
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="category" data-value="active" checked />
+            <span class="checkmark" style="--chk-color: #00e5ff;"></span>
+            <span class="chk-text">Active Satellites</span>
+            <span class="chk-count" id="count-active">—</span>
+          </label>
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="category" data-value="dead" checked />
+            <span class="checkmark" style="--chk-color: #d500f9;"></span>
+            <span class="chk-text">Dead Satellites</span>
+            <span class="chk-count" id="count-dead">—</span>
+          </label>
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="category" data-value="rocket" checked />
+            <span class="checkmark" style="--chk-color: #ff9100;"></span>
+            <span class="chk-text">Rocket Bodies</span>
+            <span class="chk-count" id="count-rocket">—</span>
+          </label>
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="category" data-value="debris" checked />
+            <span class="checkmark" style="--chk-color: #ff1744;"></span>
+            <span class="chk-text">Debris</span>
+            <span class="chk-count" id="count-debris">—</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Orbit Type Filter -->
+      <div class="control-group">
+        <label class="control-label">Orbit Shell</label>
+        <div class="checkbox-list">
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="orbitType" data-value="LEO" checked />
+            <span class="checkmark" style="--chk-color: #00e5ff;"></span>
+            <span class="chk-text">LEO (&lt; 2,000 km)</span>
+          </label>
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="orbitType" data-value="MEO" checked />
+            <span class="checkmark" style="--chk-color: #ff9100;"></span>
+            <span class="chk-text">MEO (2k–35k km)</span>
+          </label>
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="orbitType" data-value="GEO" checked />
+            <span class="checkmark" style="--chk-color: #d500f9;"></span>
+            <span class="chk-text">GEO (~35,786 km)</span>
+          </label>
+          <label class="custom-checkbox">
+            <input type="checkbox" data-filter="orbitType" data-value="HEO" checked />
+            <span class="checkmark" style="--chk-color: #667788;"></span>
+            <span class="chk-text">HEO / Other</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Time Acceleration -->
+      <div class="control-group">
+        <label class="control-label" for="speed-slider">
+          Time: <span id="speed-label">1x Real-time</span>
+        </label>
+        <input type="range" id="speed-slider" min="0" max="6" value="0" step="1" class="range-slider" />
+        <div class="speed-ticks">
+          <span>1x</span><span>10x</span><span>60x</span><span>600x</span><span>3600x</span><span>1d</span><span>7d</span>
+        </div>
+      </div>
+
+      <!-- Data Info -->
+      <div class="panel-section data-info">
+        <h3>Data Source</h3>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-key">Source</span>
+            <span class="info-val">CelesTrak</span>
+          </div>
+          <div class="info-item">
+            <span class="info-key">Last Update</span>
+            <span class="info-val" id="info-updated">—</span>
+          </div>
+          <div class="info-item">
+            <span class="info-key">Total Objects</span>
+            <span class="info-val" id="info-total">—</span>
+          </div>
+          <div class="info-item">
+            <span class="info-key">License</span>
+            <span class="info-val tag-nc">CC BY-NC 4.0</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Panel: Object Details -->
+    <aside id="panel-right" class="panel panel-right glass-card">
+      <div class="panel-header">
+        <i data-lucide="satellite"></i>
+        <h2>Object Details</h2>
+      </div>
+
+      <div id="detail-placeholder" class="detail-placeholder">
+        <i data-lucide="mouse-pointer-click"></i>
+        <p>Click on an object to view details</p>
+      </div>
+
+      <div id="detail-content" class="detail-content" style="display:none;">
+        <div class="detail-name-row">
+          <span class="detail-tag" id="detail-tag">PAYLOAD</span>
+          <h3 id="detail-name">—</h3>
+        </div>
+
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-key">NORAD ID</span>
+            <span class="detail-val" id="detail-norad">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">COSPAR ID</span>
+            <span class="detail-val" id="detail-cospar">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Owner</span>
+            <span class="detail-val" id="detail-owner">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Launch Date</span>
+            <span class="detail-val" id="detail-launch">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">RCS Size</span>
+            <span class="detail-val" id="detail-rcs">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Status</span>
+            <span class="detail-val" id="detail-status">—</span>
+          </div>
+        </div>
+
+        <h4 class="section-title">Orbital Elements</h4>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-key">Inclination</span>
+            <span class="detail-val" id="detail-inc">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Eccentricity</span>
+            <span class="detail-val" id="detail-ecc">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Period</span>
+            <span class="detail-val" id="detail-period">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Apogee</span>
+            <span class="detail-val" id="detail-apogee">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Perigee</span>
+            <span class="detail-val" id="detail-perigee">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Mean Motion</span>
+            <span class="detail-val" id="detail-mm">—</span>
+          </div>
+        </div>
+
+        <h4 class="section-title">Current Position</h4>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-key">Altitude</span>
+            <span class="detail-val" id="detail-alt">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Latitude</span>
+            <span class="detail-val" id="detail-lat">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Longitude</span>
+            <span class="detail-val" id="detail-lon">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-key">Velocity</span>
+            <span class="detail-val" id="detail-vel">—</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Bottom Status Bar -->
+    <footer id="status-bar" class="status-bar">
+      <div class="status-left">
+        <span class="sim-time" id="sim-time">—</span>
+      </div>
+      <div class="status-center">
+        <span id="status-msg">Loading orbital data...</span>
+      </div>
+      <div class="status-right">
+        <span id="status-update">Data: —</span>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
