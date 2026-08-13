@@ -225,17 +225,12 @@ export class OrbitRenderer {
     if (!this.mesh) return;
 
     const whiteColor = new THREE.Color(0xffffff);
+    const visibleList = this.visibleIndicesList || this.validMap;
 
-    for (let mi = 0; mi < this.validMap.length; mi++) {
-      const origIdx = this.validMap[mi];
-
-      // Check LOD/Filter visibility
-      if (!this.visibleSet.has(origIdx)) {
-        this.dummy.scale.set(0, 0, 0);
-        this.dummy.updateMatrix();
-        this.mesh.setMatrixAt(mi, this.dummy.matrix);
-        continue;
-      }
+    for (let vi = 0; vi < visibleList.length; vi++) {
+      const origIdx = visibleList[vi];
+      const mi = this.indexToMesh.get(origIdx);
+      if (mi === undefined) continue;
 
       const satrec = this.satrecs[origIdx];
       if (!satrec) continue;
@@ -254,10 +249,6 @@ export class OrbitRenderer {
         }
         
         this.dummy.scale.set(s, s, s);
-        this.dummy.updateMatrix();
-        this.mesh.setMatrixAt(mi, this.dummy.matrix);
-      } else {
-        this.dummy.scale.set(0, 0, 0);
         this.dummy.updateMatrix();
         this.mesh.setMatrixAt(mi, this.dummy.matrix);
       }
@@ -291,6 +282,22 @@ export class OrbitRenderer {
 
   setVisibleObjects(objectIndices) {
     this.visibleSet = new Set(objectIndices);
+    this.visibleIndicesList = objectIndices;
+
+    if (!this.mesh) return;
+
+    // Batch zero-out matrices for instances that became hidden
+    this.dummy.scale.set(0, 0, 0);
+    this.dummy.position.set(0, 0, 0);
+    this.dummy.updateMatrix();
+
+    for (let mi = 0; mi < this.validMap.length; mi++) {
+      const origIdx = this.validMap[mi];
+      if (!this.visibleSet.has(origIdx)) {
+        this.mesh.setMatrixAt(mi, this.dummy.matrix);
+      }
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
   }
 
   getObjectAtScreenPosition(screenPos, camera, canvasWidth = window.innerWidth, canvasHeight = window.innerHeight) {

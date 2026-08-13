@@ -183,11 +183,16 @@
         </div>
       </div>
 
-      <!-- Time Acceleration -->
+      <!-- Time Controls -->
       <div class="control-group">
-        <label class="control-label" for="speed-slider">
-          Time: <span id="speed-label">1x Real-time</span>
-        </label>
+        <div class="time-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <label class="control-label" for="speed-slider" style="margin-bottom:0;">
+            Time: <span id="speed-label">1x Real-time</span>
+          </label>
+          <button class="btn btn-sm btn-outline" id="btn-play-pause" title="Play / Pause Time">
+            <i data-lucide="pause" id="icon-play-pause"></i> Pause
+          </button>
+        </div>
         <input type="range" id="speed-slider" min="0" max="6" value="0" step="1" class="range-slider" />
         <div class="speed-ticks">
           <span>1x</span><span>10x</span><span>60x</span><span>600x</span><span>3600x</span><span>1d</span><span>7d</span>
@@ -338,11 +343,42 @@
           </div>
         </div>
 
-        <button class="btn btn-outline glow-purple" id="btn-explode-target" style="width:100%; margin-top:20px;">
-          <i data-lucide="bomb"></i> 💥 Explode Satellite
-        </button>
+        <div class="detail-actions" style="display:flex; gap:8px; margin-top:16px;">
+          <button class="btn btn-outline glow-cyan" id="btn-track-target" style="flex:1;">
+            <i data-lucide="crosshair"></i> 🎯 Track Target
+          </button>
+          <button class="btn btn-outline glow-purple" id="btn-explode-target" style="flex:1;">
+            <i data-lucide="bomb"></i> 💥 Explode
+          </button>
+        </div>
       </div>
     </aside>
+
+    <!-- Telemetry Mini HUD -->
+    <div id="telemetry-hud" class="telemetry-hud glass-card">
+      <div class="hud-header">
+        <span><i data-lucide="activity"></i> ORBIT TELEMETRY</span>
+        <button class="btn-close-panel" id="btn-toggle-hud" style="display:inline-flex; padding:2px;"><i data-lucide="chevron-down" id="icon-hud-chevron"></i></button>
+      </div>
+      <div class="hud-body" id="hud-body">
+        <div class="hud-stat-row">
+          <span class="hud-label">LEO (&lt;2000km):</span>
+          <span class="hud-val" id="hud-leo-count">—</span>
+        </div>
+        <div class="hud-stat-row">
+          <span class="hud-label">MEO (2k-35k):</span>
+          <span class="hud-val" id="hud-meo-count">—</span>
+        </div>
+        <div class="hud-stat-row">
+          <span class="hud-label">GEO (~35.8k):</span>
+          <span class="hud-val" id="hud-geo-count">—</span>
+        </div>
+        <div class="hud-stat-row">
+          <span class="hud-label">Cascades:</span>
+          <span class="hud-val" id="hud-cascade-count" style="color: #ff5252;">0</span>
+        </div>
+      </div>
+    </div>
 
     <!-- Bottom Status Bar -->
     <footer id="status-bar" class="status-bar">

@@ -67,7 +67,10 @@ export class UIManager {
     // Event Callbacks
     this.onFilterChange = null;
     this.onSearchSelect = null;
+    this.onSearchQuery = null;
     this.onSpeedChange = null;
+    this.onPlayPauseToggle = null;
+    this.onTrackTargetToggle = null;
 
     // Time speeds: 1x, 10x, 60x, 600x, 3600x, 1day/s, 7day/s
     this.speedValues = [1, 10, 60, 600, 3600, 86400, 604800];
@@ -113,6 +116,29 @@ export class UIManager {
       statusBar?.classList.remove('collapsed');
     });
 
+    // Telemetry HUD toggle
+    document.getElementById('btn-toggle-hud')?.addEventListener('click', () => {
+      const hud = document.getElementById('telemetry-hud');
+      const icon = document.getElementById('icon-hud-chevron');
+      if (hud) {
+        hud.classList.toggle('minimized');
+        if (icon) {
+          icon.setAttribute('data-lucide', hud.classList.contains('minimized') ? 'chevron-up' : 'chevron-down');
+          if (window.lucide) window.lucide.createIcons();
+        }
+      }
+    });
+
+    // Play / Pause Button
+    document.getElementById('btn-play-pause')?.addEventListener('click', () => {
+      if (this.onPlayPauseToggle) this.onPlayPauseToggle();
+    });
+
+    // Track Target Button
+    document.getElementById('btn-track-target')?.addEventListener('click', () => {
+      if (this.onTrackTargetToggle) this.onTrackTargetToggle();
+    });
+
     // Filter checkboxes
     document.querySelectorAll('[data-filter]').forEach(input => {
       input.addEventListener('change', () => {
@@ -133,7 +159,7 @@ export class UIManager {
       if (this.onSpeedChange) this.onSpeedChange(speed);
     });
 
-    // Search Input
+    // Search Input Autocomplete
     let searchTimeout = null;
     this.elements.searchInput?.addEventListener('input', (e) => {
       clearTimeout(searchTimeout);
@@ -147,7 +173,14 @@ export class UIManager {
           const results = this.onSearchQuery(query);
           this.renderSearchResults(results);
         }
-      }, 200);
+      }, 150);
+    });
+
+    // Close search dropdown on click outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-box') && !e.target.closest('.search-results')) {
+        if (this.elements.searchResults) this.elements.searchResults.innerHTML = '';
+      }
     });
   }
 
@@ -218,16 +251,27 @@ export class UIManager {
     container.innerHTML = '';
 
     if (!results || results.length === 0) {
-      container.innerHTML = '<div class="search-result-item" style="color:var(--dim);">No matching objects</div>';
+      container.innerHTML = '<div class="search-result-item" style="color:var(--dim); font-size:0.75rem;">No matching objects</div>';
       return;
     }
 
-    results.slice(0, 15).forEach(obj => {
+    const tagColors = {
+      active: '#00e5ff',
+      dead: '#d500f9',
+      rocket: '#ff9100',
+      debris: '#94a3b8'
+    };
+
+    results.slice(0, 10).forEach(obj => {
       const item = document.createElement('div');
       item.className = 'search-result-item';
+      const catColor = tagColors[obj.category] || '#667788';
       item.innerHTML = `
         <span class="sr-name">${obj.OBJECT_NAME || 'UNKNOWN'}</span>
-        <span class="sr-id">#${obj.NORAD_CAT_ID}</span>
+        <div class="sr-info">
+          <span class="sr-tag" style="background: ${catColor}22; color: ${catColor}; border: 1px solid ${catColor}44;">${obj.category?.toUpperCase() || 'SAT'}</span>
+          <span class="sr-id">#${obj.NORAD_CAT_ID}</span>
+        </div>
       `;
       item.addEventListener('click', () => {
         if (this.onSearchSelect) this.onSearchSelect(obj);
@@ -236,6 +280,42 @@ export class UIManager {
       });
       container.appendChild(item);
     });
+  }
+
+  setTelemetryData(leo, meo, geo, cascades = 0) {
+    const elLeo = document.getElementById('hud-leo-count');
+    const elMeo = document.getElementById('hud-meo-count');
+    const elGeo = document.getElementById('hud-geo-count');
+    const elCas = document.getElementById('hud-cascade-count');
+    if (elLeo) elLeo.textContent = leo.toLocaleString();
+    if (elMeo) elMeo.textContent = meo.toLocaleString();
+    if (elGeo) elGeo.textContent = geo.toLocaleString();
+    if (elCas) elCas.textContent = cascades.toLocaleString();
+  }
+
+  setTrackingState(isTracking) {
+    const btn = document.getElementById('btn-track-target');
+    if (btn) {
+      if (isTracking) {
+        btn.classList.add('tracking-active');
+        btn.innerHTML = '<i data-lucide="crosshair"></i> 🛑 Stop Track';
+      } else {
+        btn.classList.remove('tracking-active');
+        btn.innerHTML = '<i data-lucide="crosshair"></i> 🎯 Track Target';
+      }
+      if (window.lucide) window.lucide.createIcons();
+    }
+  }
+
+  setPlayPauseState(isPaused) {
+    const btn = document.getElementById('btn-play-pause');
+    if (btn) {
+      btn.innerHTML = isPaused
+        ? '<i data-lucide="play" id="icon-play-pause"></i> Play'
+        : '<i data-lucide="pause" id="icon-play-pause"></i> Pause';
+      if (window.lucide) window.lucide.createIcons();
+    }
+    this.setStatus(isPaused ? 'Simulation time paused' : 'Live tracking active', !isPaused);
   }
 
   showObjectDetails(obj, position, velocity) {

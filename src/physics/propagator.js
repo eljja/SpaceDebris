@@ -38,13 +38,13 @@ export class PhysicsPropagator {
     let ay = -MU * pos.y / r3;
     let az = -MU * pos.z / r3;
 
-    // 2. J2 Perturbation (Earth oblateness)
-    const z2_r2 = (pos.z * pos.z) / r2;
+    // 2. J2 Perturbation (Earth oblateness with Y as North polar axis in Three.js)
+    const y2_r2 = (pos.y * pos.y) / r2;
     const j2Factor = (1.5 * J2 * MU * RE * RE) / r5;
 
-    ax += j2Factor * pos.x * (5 * z2_r2 - 1);
-    ay += j2Factor * pos.y * (5 * z2_r2 - 1);
-    az += j2Factor * pos.z * (5 * z2_r2 - 3);
+    ax += j2Factor * pos.x * (5 * y2_r2 - 1);
+    ay += j2Factor * pos.y * (5 * y2_r2 - 3);
+    az += j2Factor * pos.z * (5 * y2_r2 - 1);
 
     // 3. Atmospheric Drag (for altitude < 1000km)
     const alt = r - RE;

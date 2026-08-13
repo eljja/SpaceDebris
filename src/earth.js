@@ -30,8 +30,9 @@ export class Earth {
       bumpScale: 5,
       specular: new THREE.Color(0x444444),
       shininess: 25,
-      emissive: new THREE.Color(0x12243b), // Soft deep-blue night glow so continents remain visible
-      emissiveIntensity: 0.85
+      emissiveMap: textureLoader.load('./data/textures/earth-night.png'),
+      emissive: new THREE.Color(0xffe0a0), // Warm golden city lights
+      emissiveIntensity: 0.95
     });
     
     this._earthMesh = new THREE.Mesh(geo, mat);

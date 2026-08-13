@@ -46,6 +46,17 @@ export class SoundEngine {
 
       this.startAmbientDrone();
       this.initialized = true;
+
+      // Power-saving: Suspend Web Audio when tab is hidden, resume on focus
+      document.addEventListener('visibilitychange', () => {
+        if (this.ctx) {
+          if (document.hidden && this.ctx.state === 'running') {
+            this.ctx.suspend();
+          } else if (!document.hidden && this.ctx.state === 'suspended' && !this.muted) {
+            this.ctx.resume();
+          }
+        }
+      });
     } catch (e) {
       console.warn('[SoundEngine] Web Audio API init failed:', e);
     }

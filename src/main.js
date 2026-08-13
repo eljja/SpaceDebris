@@ -28,6 +28,9 @@ class SpaceDebrisApp {
     this.timeSpeed = 1;
     this.lastFrameTime = performance.now();
     this.selectedIndex = -1;
+    this.isPaused = false;
+    this.isTracking = false;
+    this.orbitCounts = { leo: 0, meo: 0, geo: 0 };
 
     this.init();
   }
@@ -119,6 +122,13 @@ class SpaceDebrisApp {
     });
     this.ui.setObjectCounts(counts);
 
+    // Count orbits by type for Telemetry HUD
+    this.orbitCounts = {
+      leo: this.dataLoader.getObjectsByOrbitType('LEO').length,
+      meo: this.dataLoader.getObjectsByOrbitType('MEO').length,
+      geo: this.dataLoader.getObjectsByOrbitType('GEO').length
+    };
+
     // Filter change
     this.ui.onFilterChange = ({ categories, orbitTypes }) => {
       this.lodController.setFilter('category', categories);
@@ -130,11 +140,34 @@ class SpaceDebrisApp {
     // Speed
     this.ui.onSpeedChange = (speed) => { this.timeSpeed = speed; };
 
-    // Search
+    // Play / Pause Time
+    this.ui.onPlayPauseToggle = () => {
+      this.isPaused = !this.isPaused;
+      this.ui.setPlayPauseState(this.isPaused);
+    };
+
+    // Track Target Toggle
+    this.ui.onTrackTargetToggle = () => {
+      if (this.selectedIndex === -1) return;
+      this.isTracking = !this.isTracking;
+      this.ui.setTrackingState(this.isTracking);
+      const controls = this.sceneManager.getControls();
+      if (!this.isTracking) {
+        controls.target.set(0, 0, 0);
+        controls.minDistance = 6500;
+      } else {
+        controls.minDistance = 200;
+      }
+    };
+
+    // Search with quick zoom
     this.ui.onSearchQuery = (query) => this.dataLoader.search(query);
     this.ui.onSearchSelect = (obj) => {
       const idx = objects.indexOf(obj);
-      if (idx !== -1) this._selectObject(idx);
+      if (idx !== -1) {
+        this._selectObject(idx);
+        this._zoomToObject(idx);
+      }
     };
 
     // Sim Engine toggle
@@ -233,9 +266,29 @@ class SpaceDebrisApp {
         this.ui.elements.panelRight.classList.remove('hidden');
       }
     } else {
+      if (this.isTracking) {
+        this.isTracking = false;
+        this.ui.setTrackingState(false);
+        this.sceneManager.getControls().target.set(0, 0, 0);
+        this.sceneManager.getControls().minDistance = 6500;
+      }
       this.orbitRenderer.clearOrbitPath();
       this.ui.showObjectDetails(null, null, null);
     }
+  }
+
+  _zoomToObject(index) {
+    const pos = this.orbitRenderer.getObjectPosition(index);
+    if (!pos) return;
+    const cam = this.sceneManager.getCamera();
+    const controls = this.sceneManager.getControls();
+    
+    const dir = pos.clone().normalize();
+    const targetCamPos = pos.clone().add(dir.multiplyScalar(1500));
+    
+    cam.position.copy(targetCamPos);
+    controls.target.set(0, 0, 0);
+    controls.update();
   }
 
   _navigateObject(step) {
@@ -285,34 +338,48 @@ class SpaceDebrisApp {
   }
 
   _update(delta) {
-    // 1. Advance simulation time
     const now = performance.now();
-    const frameDelta = Math.min((now - this.lastFrameTime) / 1000, 0.1); // Clamp to 100ms max
+    const frameDelta = this.isPaused ? 0 : Math.min((now - this.lastFrameTime) / 1000, 0.1);
     this.lastFrameTime = now;
 
-    const simDeltaMs = frameDelta * 1000 * this.timeSpeed;
-    this.simDate = new Date(this.simDate.getTime() + simDeltaMs);
-    this.ui.updateTime(this.simDate);
+    // 1. Advance simulation time
+    if (!this.isPaused) {
+      const simDeltaMs = frameDelta * 1000 * this.timeSpeed;
+      this.simDate = new Date(this.simDate.getTime() + simDeltaMs);
+      this.ui.updateTime(this.simDate);
 
-    // 2. Rotate Earth
-    this.earth.update(frameDelta);
+      // 2. Rotate Earth
+      this.earth.update(frameDelta);
+    }
 
     // 3. Propagate orbits via SGP4 and update 3D target reticle
     this.orbitRenderer.update(this.simDate, this.sceneManager.getCamera());
 
     // 4. Step physics simulation (if active)
-    if (this.simController) {
+    if (this.simController && !this.isPaused) {
       this.simController.update(frameDelta);
     }
 
-    // 5. LOD update
+    // 5. Camera Tracking Mode
+    if (this.isTracking && this.selectedIndex !== -1) {
+      const pos = this.orbitRenderer.getObjectPosition(this.selectedIndex);
+      if (pos) {
+        const controls = this.sceneManager.getControls();
+        const cam = this.sceneManager.getCamera();
+        const deltaTarget = pos.clone().sub(controls.target);
+        controls.target.copy(pos);
+        cam.position.add(deltaTarget);
+      }
+    }
+
+    // 6. LOD update
     const dist = this.sceneManager.getCameraDistance();
     this.lodController.update(dist);
 
-    // 6. Metrics
+    // 7. Metrics & Telemetry
     this._updateMetrics();
 
-    // 7. Update selected object's live position
+    // 8. Update selected object's live position
     if (this.selectedIndex !== -1) {
       const obj = this.dataLoader.getObjects()[this.selectedIndex];
       const pos = this.orbitRenderer.getObjectPosition(this.selectedIndex);
@@ -327,6 +394,14 @@ class SpaceDebrisApp {
     const visible = this.lodController.getVisibleCount();
     const lodLevel = this.lodController.getCurrentLevel();
     this.ui.setMetrics(total, visible, lodLevel);
+
+    const cascades = this.simController?.simulator?.stats?.collisions || 0;
+    this.ui.setTelemetryData(
+      this.orbitCounts.leo,
+      this.orbitCounts.meo,
+      this.orbitCounts.geo,
+      cascades
+    );
   }
 }
 
