@@ -60,19 +60,23 @@ export class SimulationController {
         this.simulator.addParticle({
           position: { ...particleData.position },
           velocity: { vx: vvx, vy: vvy, vz: vvz },
-          mass: particleData.mass || 10
+          mass: particleData.mass || 10,
+          category: 'user_injected' // Tag as user-added particle
         });
       }
       
       this.sound.playDebrisLaunch();
-      this.uiManager.setStatus(`Launched ${count} debris particles!`);
+      this.uiManager.setStatus(`🚀 Launched ${count} user-injected debris particles (Neon Green)!`);
     };
 
     // 2. Numerical Launch Callback
     this.inputPanel.onLaunchNumerical = (particleData) => {
-      this.simulator.addParticle(particleData);
+      this.simulator.addParticle({
+        ...particleData,
+        category: 'user_injected'
+      });
       this.sound.playDebrisLaunch();
-      this.uiManager.setStatus(`Launched numerical particle`);
+      this.uiManager.setStatus(`🚀 Launched numerical particle (Neon Green)`);
     };
 
     // 3. Explosion Trigger Callback
@@ -120,6 +124,10 @@ export class SimulationController {
     this.simMesh.count = count;
 
     const dummy = new THREE.Object3D();
+    const colorUser = new THREE.Color(0x00ff88);   // Neon Electric Green (User Added)
+    const colorExplode = new THREE.Color(0xffea00); // Bright Yellow (Explosion)
+    const colorCascade = new THREE.Color(0xff1744); // Crimson Red (Collision Cascade)
+
     for (let i = 0; i < count; i++) {
       const p = particles[i];
       dummy.position.set(p.position.x, p.position.y, p.position.z);
@@ -128,8 +136,18 @@ export class SimulationController {
       dummy.scale.set(sizeScale, sizeScale, sizeScale);
       dummy.updateMatrix();
       this.simMesh.setMatrixAt(i, dummy.matrix);
+
+      // Color instance per particle origin category
+      if (p.category === 'user_injected') {
+        this.simMesh.setColorAt(i, colorUser);
+      } else if (p.category === 'sim_tracked') {
+        this.simMesh.setColorAt(i, colorExplode);
+      } else {
+        this.simMesh.setColorAt(i, colorCascade);
+      }
     }
     this.simMesh.instanceMatrix.needsUpdate = true;
+    if (this.simMesh.instanceColor) this.simMesh.instanceColor.needsUpdate = true;
   }
 
   setSimActive(active) {
