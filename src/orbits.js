@@ -222,20 +222,69 @@ export class OrbitRenderer {
     this.visibleSet = new Set(objectIndices);
   }
 
-  getObjectAtScreenPosition(screenPos, camera) {
+  getObjectAtScreenPosition(screenPos, camera, canvasWidth = window.innerWidth, canvasHeight = window.innerHeight) {
     if (!this.mesh) return null;
 
+    // 1. Try standard geometric Raycaster first
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(screenPos, camera);
-
     const intersects = raycaster.intersectObject(this.mesh);
     if (intersects.length > 0) {
       const instanceId = intersects[0].instanceId;
       if (instanceId < this.validMap.length) {
-        return this.validMap[instanceId]; // return original object index
+        return this.validMap[instanceId];
       }
     }
-    return null;
+
+    // 2. Fallback to 2D Screen-space Proximity picking (32px touch/click radius tolerance)
+    const clickX = ((screenPos.x + 1) / 2) * canvasWidth;
+    const clickY = ((1 - screenPos.y) / 2) * canvasHeight;
+
+    let closestIdx = -1;
+    let minDistanceSq = 32 * 32;
+
+    const projPos = new THREE.Vector3();
+    const tempMatrix = new THREE.Matrix4();
+    const earthSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 6371);
+    const ray = new THREE.Ray();
+    const hitPoint = new THREE.Vector3();
+
+    for (let mi = 0; mi < this.validMap.length; mi++) {
+      const origIdx = this.validMap[mi];
+      if (!this.visibleSet.has(origIdx)) continue;
+
+      this.mesh.getMatrixAt(mi, tempMatrix);
+      projPos.setFromMatrixPosition(tempMatrix);
+
+      // Occlusion check: Don't pick objects behind Earth relative to camera
+      const dir = projPos.clone().sub(camera.position);
+      const distToObj = dir.length();
+      dir.normalize();
+
+      ray.set(camera.position, dir);
+      if (ray.intersectSphere(earthSphere, hitPoint)) {
+        if (hitPoint.distanceTo(camera.position) < distToObj - 50) {
+          continue; // Hidden behind Earth
+        }
+      }
+
+      projPos.project(camera); // Project to NDC [-1, 1]
+      if (projPos.z > 1.0) continue; // Behind camera clipping plane
+
+      const px = ((projPos.x + 1) / 2) * canvasWidth;
+      const py = ((1 - projPos.y) / 2) * canvasHeight;
+
+      const dx = px - clickX;
+      const dy = py - clickY;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < minDistanceSq) {
+        minDistanceSq = distSq;
+        closestIdx = origIdx;
+      }
+    }
+
+    return closestIdx !== -1 ? closestIdx : null;
   }
 
   getObjectPosition(index) {

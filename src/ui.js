@@ -182,6 +182,13 @@ export class UIManager {
     if (this.elements.metricLod) this.elements.metricLod.textContent = `L${lodLevel}`;
   }
 
+  setNavCounter(currentPos, totalCount) {
+    const counter = document.getElementById('detail-nav-counter');
+    if (counter) {
+      counter.textContent = `${currentPos.toLocaleString()} / ${totalCount.toLocaleString()}`;
+    }
+  }
+
   setMetadataInfo(metadata) {
     if (!metadata) return;
     if (this.elements.infoUpdated) {

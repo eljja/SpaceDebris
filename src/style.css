@@ -528,6 +528,25 @@ html, body {
 .detail-placeholder i, .detail-placeholder svg { width: 28px; height: 28px; opacity: 0.5; }
 .detail-placeholder p { font-size: 0.8rem; }
 
+.detail-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.detail-nav-counter {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--cyan);
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  height: auto;
+}
+
 .detail-name-row {
   display: flex;
   align-items: center;

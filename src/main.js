@@ -160,6 +160,14 @@ class SpaceDebrisApp {
       }
     });
 
+    // Prev / Next Object Navigation
+    document.getElementById('btn-prev-object')?.addEventListener('click', () => {
+      this._navigateObject(-1);
+    });
+    document.getElementById('btn-next-object')?.addEventListener('click', () => {
+      this._navigateObject(1);
+    });
+
     // Sound toggle
     document.getElementById('btn-toggle-sound')?.addEventListener('click', () => {
       const muted = this.simController.sound.toggleMute();
@@ -191,7 +199,10 @@ class SpaceDebrisApp {
       };
 
       const hit = this.orbitRenderer.getObjectAtScreenPosition(
-        ndc, this.sceneManager.getCamera()
+        ndc,
+        this.sceneManager.getCamera(),
+        rect.width,
+        rect.height
       );
       if (hit !== null) {
         this._selectObject(hit);
@@ -200,19 +211,46 @@ class SpaceDebrisApp {
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  //  Selection
+  //  Selection & Navigation
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   _selectObject(index) {
     this.selectedIndex = index;
-    const obj = this.dataLoader.getObjects()[index];
+    const objects = this.dataLoader.getObjects();
+    const obj = objects[index];
+
+    const visibleIndices = this.lodController.getVisibleIndices();
+    const currentPos = visibleIndices ? visibleIndices.indexOf(index) + 1 : 0;
+    const totalCount = visibleIndices ? visibleIndices.length : 0;
+
     if (obj) {
       this.orbitRenderer.showOrbitPath(index);
       const pos = this.orbitRenderer.getObjectPosition(index);
       this.ui.showObjectDetails(obj, pos, null);
+      this.ui.setNavCounter(currentPos > 0 ? currentPos : 1, totalCount);
+
+      // Automatically open the details panel when an object is selected
+      if (this.ui.elements.panelRight) {
+        this.ui.elements.panelRight.classList.remove('hidden');
+      }
     } else {
       this.orbitRenderer.clearOrbitPath();
       this.ui.showObjectDetails(null, null, null);
     }
+  }
+
+  _navigateObject(step) {
+    const visibleIndices = this.lodController.getVisibleIndices();
+    if (!visibleIndices || visibleIndices.length === 0) return;
+
+    let currentPosInList = visibleIndices.indexOf(this.selectedIndex);
+    if (currentPosInList === -1) {
+      currentPosInList = step > 0 ? 0 : visibleIndices.length - 1;
+    } else {
+      currentPosInList = (currentPosInList + step + visibleIndices.length) % visibleIndices.length;
+    }
+
+    const nextIndex = visibleIndices[currentPosInList];
+    this._selectObject(nextIndex);
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
