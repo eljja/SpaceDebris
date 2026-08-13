@@ -34,6 +34,7 @@ export class OrbitRenderer {
 
     this._buildSatrecs();
     this._buildMesh();
+    this._initSelectionMarker();
 
     // Initially all valid objects visible
     for (let i = 0; i < this.validMap.length; i++) {
@@ -181,8 +182,49 @@ export class OrbitRenderer {
     this.scene.add(this.mesh);
   }
 
-  update(now) {
+  _initSelectionMarker() {
+    this.selectionMarkerGroup = new THREE.Group();
+
+    // 1. Inner core pulsing sphere
+    const coreGeo = new THREE.SphereGeometry(25, 16, 16);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95
+    });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    this.selectionMarkerGroup.add(coreMesh);
+
+    // 2. Inner cyan halo ring
+    const ringGeo = new THREE.RingGeometry(40, 52, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00e5ff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    this.selectionMarkerGroup.add(ringMesh);
+
+    // 3. Outer yellow reticle crosshair (diamond ring)
+    const reticleGeo = new THREE.RingGeometry(65, 80, 4);
+    const reticleMat = new THREE.MeshBasicMaterial({
+      color: 0xffea00,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    this.reticleRing = new THREE.Mesh(reticleGeo, reticleMat);
+    this.selectionMarkerGroup.add(this.reticleRing);
+
+    this.selectionMarkerGroup.visible = false;
+    this.scene.add(this.selectionMarkerGroup);
+  }
+
+  update(now, camera = null) {
     if (!this.mesh) return;
+
+    const whiteColor = new THREE.Color(0xffffff);
 
     for (let mi = 0; mi < this.validMap.length; mi++) {
       const origIdx = this.validMap[mi];
@@ -204,7 +246,13 @@ export class OrbitRenderer {
       if (posEci && typeof posEci.x === 'number' && isFinite(posEci.x)) {
         // ECI -> Three.js:  X=ECI.x, Y=ECI.z, Z=-ECI.y
         this.dummy.position.set(posEci.x, posEci.z, -posEci.y);
-        const s = this.scales[mi];
+        
+        let s = this.scales[mi];
+        if (origIdx === this.selectedObjectIndex) {
+          s *= 2.5; // Make selected object 2.5x larger and white
+          this.mesh.setColorAt(mi, whiteColor);
+        }
+        
         this.dummy.scale.set(s, s, s);
         this.dummy.updateMatrix();
         this.mesh.setMatrixAt(mi, this.dummy.matrix);
@@ -216,6 +264,29 @@ export class OrbitRenderer {
     }
 
     this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+
+    // Update Selection Marker Halo
+    if (this.selectedObjectIndex !== -1) {
+      const selPos = this.getObjectPosition(this.selectedObjectIndex);
+      if (selPos) {
+        this.selectionMarkerGroup.position.copy(selPos);
+        if (camera) {
+          this.selectionMarkerGroup.lookAt(camera.position);
+          const dist = camera.position.distanceTo(selPos);
+          const scale = Math.max(0.5, Math.min(6.0, dist / 8000));
+          this.selectionMarkerGroup.scale.set(scale, scale, scale);
+        }
+        if (this.reticleRing) {
+          this.reticleRing.rotation.z += 0.02; // Rotate reticle ring
+        }
+        this.selectionMarkerGroup.visible = true;
+      } else {
+        this.selectionMarkerGroup.visible = false;
+      }
+    } else if (this.selectionMarkerGroup) {
+      this.selectionMarkerGroup.visible = false;
+    }
   }
 
   setVisibleObjects(objectIndices) {
@@ -300,7 +371,9 @@ export class OrbitRenderer {
   }
 
   showOrbitPath(objectIndex) {
+    this.selectedObjectIndex = objectIndex;
     this.clearOrbitPath();
+    this.selectedObjectIndex = objectIndex; // Restore selected index after clear
 
     const satrec = this.satrecs[objectIndex];
     if (!satrec) return;
@@ -338,6 +411,10 @@ export class OrbitRenderer {
   }
 
   clearOrbitPath() {
+    this.selectedObjectIndex = -1;
+    if (this.selectionMarkerGroup) {
+      this.selectionMarkerGroup.visible = false;
+    }
     if (this.orbitPath) {
       this.scene.remove(this.orbitPath);
       this.orbitPath.geometry.dispose();

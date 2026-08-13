@@ -297,8 +297,8 @@ class SpaceDebrisApp {
     // 2. Rotate Earth
     this.earth.update(frameDelta);
 
-    // 3. Propagate orbits via SGP4
-    this.orbitRenderer.update(this.simDate);
+    // 3. Propagate orbits via SGP4 and update 3D target reticle
+    this.orbitRenderer.update(this.simDate, this.sceneManager.getCamera());
 
     // 4. Step physics simulation (if active)
     if (this.simController) {
