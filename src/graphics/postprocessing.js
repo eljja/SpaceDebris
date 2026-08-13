@@ -20,7 +20,7 @@ export class PostProcessingManager {
     // Set linear color space & ACES Filmic tone mapping on base renderer
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.7;
 
     // Create Composer with HalfFloatType for HDR color depth
     const renderTarget = new THREE.WebGLRenderTarget(
@@ -43,9 +43,9 @@ export class PostProcessingManager {
     const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
     this.bloomPass = new UnrealBloomPass(
       resolution,
-      1.1,  // Strength
-      0.5,  // Radius
-      0.25  // Threshold (lower threshold makes bright orbital points glow)
+      0.4,  // Strength — subtle glow
+      0.3,  // Radius
+      0.75  // Threshold — only very bright things glow
     );
     this.composer.addPass(this.bloomPass);
 

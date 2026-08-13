@@ -32,10 +32,10 @@ export class SimulationController {
   }
 
   initSimMesh() {
-    // Dedicated InstancedMesh for physics simulation debris particles (Max 5,000)
-    const geo = new THREE.SphereGeometry(12, 6, 6); // 12km mesh radius
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff1744 }); // Red glow
-    this.simMesh = new THREE.InstancedMesh(geo, mat, 5000);
+    // Dedicated InstancedMesh for physics simulation debris particles (Max 2,000)
+    const geo = new THREE.SphereGeometry(6, 4, 4); // 6km radius, low-poly
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
+    this.simMesh = new THREE.InstancedMesh(geo, mat, 2000);
     this.simMesh.count = 0;
     this.sceneManager.getScene().add(this.simMesh);
   }
@@ -103,8 +103,8 @@ export class SimulationController {
   update(deltaTimeSec) {
     if (!this.simActive) return;
 
-    // 1. Step physics loop
-    const result = this.simulator.step(deltaTimeSec * 5.0); // 5x speed step
+    // 1. Step physics loop (no time multiplier to avoid cascade amplification)
+    const result = this.simulator.step(deltaTimeSec);
 
     // 2. Update VFX
     this.vfx.update(deltaTimeSec);

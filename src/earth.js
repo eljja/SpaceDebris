@@ -137,13 +137,13 @@ export class Earth {
   }
 
   _initLights() {
-    // Sun directional light
-    this._sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    // Sun directional light — subtle, not blinding
+    this._sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
     this._sunLight.position.set(1, 0.3, 0.8).normalize();
     this.group.add(this._sunLight);
 
-    // Ambient fill
-    this._ambientLight = new THREE.AmbientLight(0x222244, 0.8);
+    // Ambient fill — dim to preserve space darkness
+    this._ambientLight = new THREE.AmbientLight(0x222244, 0.4);
     this.group.add(this._ambientLight);
   }
 
