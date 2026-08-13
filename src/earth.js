@@ -28,8 +28,10 @@ export class Earth {
       specularMap: textureLoader.load('./data/textures/earth-water.png'),
       bumpMap: textureLoader.load('./data/textures/earth-topology.png'),
       bumpScale: 5,
-      specular: new THREE.Color('grey'),
-      shininess: 35
+      specular: new THREE.Color(0x444444),
+      shininess: 25,
+      emissive: new THREE.Color(0x12243b), // Soft deep-blue night glow so continents remain visible
+      emissiveIntensity: 0.85
     });
     
     this._earthMesh = new THREE.Mesh(geo, mat);
@@ -42,9 +44,9 @@ export class Earth {
 
   _initGrid() {
     const mat = new THREE.LineBasicMaterial({
-      color: 0x446688,
+      color: 0x5588bb,
       transparent: true,
-      opacity: 0.18
+      opacity: 0.22
     });
     const r = this.radius * 1.002;
     const gridGroup = new THREE.Group();
@@ -86,7 +88,7 @@ export class Earth {
     // Equator highlight
     const eqPoints = [];
     const eqMat = new THREE.LineBasicMaterial({
-      color: 0x00e5ff, transparent: true, opacity: 0.25
+      color: 0x00e5ff, transparent: true, opacity: 0.3
     });
     for (let lng = 0; lng <= 360; lng += 2) {
       const theta = lng * (Math.PI / 180);
@@ -137,13 +139,13 @@ export class Earth {
   }
 
   _initLights() {
-    // Sun directional light — subtle, not blinding
-    this._sunLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    // Sun directional light — daytime illumination
+    this._sunLight = new THREE.DirectionalLight(0xffffff, 0.95);
     this._sunLight.position.set(1, 0.3, 0.8).normalize();
     this.group.add(this._sunLight);
 
-    // Ambient fill — dim to preserve space darkness
-    this._ambientLight = new THREE.AmbientLight(0x222244, 0.4);
+    // Ambient light — brightened so night side map/continents are clearly visible
+    this._ambientLight = new THREE.AmbientLight(0x5577aa, 0.75);
     this.group.add(this._ambientLight);
   }
 
