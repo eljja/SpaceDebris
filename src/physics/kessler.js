@@ -53,9 +53,9 @@ export class KesslerSimulator {
       id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       position: { ...particle.position },
       velocity: { ...particle.velocity },
-      mass: particle.mass || 20.0,
-      size: particle.size || 0.2,
-      areaToMass: particle.areaToMass || 0.02,
+      mass: particle.mass ?? 20.0,
+      size: particle.size ?? 0.2,
+      areaToMass: particle.areaToMass ?? 0.02,
       category: particle.category || 'sim_debris',
       immuneTimer: particle.immuneTimer || 0 // seconds of collision immunity
     };

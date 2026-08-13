@@ -58,12 +58,11 @@ export class BreakupModel {
     const allFragments = [];
     let totalGeneratedMass = 0;
 
-    // Maximum fragment size scales with parent mass
-    // Largest fragment ≈ cube root of parent volume
+    // Maximum fragment size scales with parent mass (strictly > lcMin)
     const parentVolume = parentMass / ALUMINUM_DENSITY;
-    const maxLc = Math.min(
-      2.0, // Hard cap at 2m
-      Math.pow(parentVolume * 6 / Math.PI, 1/3) * 0.8 // 80% of equivalent sphere diameter
+    const maxLc = Math.max(
+      L_c_generation * 2, // Must be greater than L_c_generation (0.01m)
+      Math.min(2.0, Math.pow(parentVolume * 6 / Math.PI, 1/3) * 0.8)
     );
 
     for (let i = 0; i < rawCount; i++) {
@@ -177,16 +176,15 @@ export class BreakupModel {
       const pyT = parentMass * parentVel.vy;
       const pzT = parentMass * parentVel.vz;
 
-      // Distribute residual momentum proportionally to mass
-      const dpx = pxT - pxA;
-      const dpy = pyT - pyA;
-      const dpz = pzT - pzA;
+      // Uniform momentum correction delta-V: dv = deltaP / parentMass
+      const dvCorrX = dpx / parentMass;
+      const dvCorrY = dpy / parentMass;
+      const dvCorrZ = dpz / parentMass;
 
       for (const f of fragments) {
-        const w = f.mass / parentMass; // mass-weighted correction
-        f.velocity.vx += dpx * w / f.mass;
-        f.velocity.vy += dpy * w / f.mass;
-        f.velocity.vz += dpz * w / f.mass;
+        f.velocity.vx += dvCorrX;
+        f.velocity.vy += dvCorrY;
+        f.velocity.vz += dvCorrZ;
       }
     }
 
