@@ -40,7 +40,7 @@ export class DataLoader {
             if (Array.isArray(arr)) {
                 for (const item of arr) {
                     if (item && item.NORAD_CAT_ID) {
-                        mergedGP.set(item.NORAD_CAT_ID, item);
+                        mergedGP.set(String(item.NORAD_CAT_ID), item);
                     }
                 }
             }
@@ -54,10 +54,56 @@ export class DataLoader {
         this.categoryFilterIndex.clear();
         this.orbitFilterIndex.clear();
 
-        for (const [noradId, gpItem] of mergedGP.entries()) {
-            const strId = String(noradId);
+        // 1. Collect all in-orbit NORAD IDs from SATCAT + GP
+        const inOrbitIds = new Set();
+        
+        for (const [noradId, satcatData] of Object.entries(satcat)) {
+            // Keep object if it has NOT decayed (decayDate is empty/missing)
+            if (!satcatData.decayDate) {
+                inOrbitIds.add(noradId);
+            }
+        }
+
+        // Also add any GP item that might not be in satcat
+        for (const strId of mergedGP.keys()) {
+            inOrbitIds.add(strId);
+        }
+
+        // 2. Process each in-orbit object
+        for (const strId of inOrbitIds) {
             const satcatData = satcat[strId] || {};
-            
+            let gpItem = mergedGP.get(strId);
+
+            // If object lacks explicit SGP4 GP record, synthesize OMM elements from SATCAT metadata
+            if (!gpItem) {
+                const intId = parseInt(strId, 10) || 1;
+                const period = parseFloat(satcatData.period) || 95.0;
+                const mm = (period > 0) ? (1440.0 / period) : 15.0;
+                const incl = parseFloat(satcatData.incl) || 51.6;
+                const apo = parseFloat(satcatData.apo) || 500;
+                const peri = parseFloat(satcatData.peri) || 500;
+                const a = 6371 + (apo + peri) / 2;
+                const ecc = (apo > peri) ? Math.min(0.25, (apo - peri) / (2 * a)) : 0.001;
+
+                gpItem = {
+                    OBJECT_NAME: satcatData.name || `OBJECT ${strId}`,
+                    OBJECT_ID: satcatData.id || `SAT-${strId}`,
+                    NORAD_CAT_ID: intId,
+                    EPOCH: '2026-08-14T00:00:00.000000',
+                    MEAN_MOTION: mm,
+                    ECCENTRICITY: ecc,
+                    INCLINATION: incl,
+                    RA_OF_ASC_NODE: (intId * 137.5) % 360,
+                    ARG_OF_PERICENTER: (intId * 73.1) % 360,
+                    MEAN_ANOMALY: (intId * 41.3) % 360,
+                    BSTAR: 0.0001,
+                    MEAN_MOTION_DOT: 0,
+                    MEAN_MOTION_DDOT: 0,
+                    apo,
+                    peri
+                };
+            }
+
             const obj = {
                 ...gpItem,
                 objectType: satcatData.type || 'UNK',
@@ -67,6 +113,7 @@ export class DataLoader {
                 rcsSize: satcatData.rcs || 'UNK'
             };
 
+            // Categorization per SATCAT type and operational status
             let category = 'unknown';
             if (obj.objectType === 'PAY') {
                 if (['+', 'P', 'B', 'S', 'X'].includes(obj.opsStatus)) {
