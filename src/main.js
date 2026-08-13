@@ -146,8 +146,7 @@ class SpaceDebrisApp {
     // Drag launch activation (inside sim panel)
     document.getElementById('btn-enable-drag')?.addEventListener('click', () => {
       this.simController.placer.setActive(true);
-      // Disable OrbitControls so drag goes to placer
-      this.sceneManager.getControls().enabled = false;
+      this.ui.setStatus('🎯 Drag vector on Earth to launch debris', true);
     });
 
     // Targeted explosion

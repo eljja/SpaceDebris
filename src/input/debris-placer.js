@@ -8,10 +8,11 @@
 import * as THREE from 'three';
 
 export class DebrisPlacer {
-  constructor(scene, camera, domElement) {
+  constructor(scene, camera, domElement, controls = null) {
     this.scene = scene;
     this.camera = camera;
     this.domElement = domElement;
+    this.controls = controls;
 
     this.active = false;
     this.isDragging = false;
@@ -87,6 +88,8 @@ export class DebrisPlacer {
     this.markerMesh.visible = false;
     this.arrowHelper.visible = false;
     this.orbitPreviewLine.visible = false;
+    this.active = false;
+    if (this.controls) this.controls.enabled = true;
   }
 
   bindEvents() {
@@ -108,6 +111,7 @@ export class DebrisPlacer {
 
       if (raycaster.ray.intersectSphere(earthSphere, intersectPoint)) {
         this.isDragging = true;
+        if (this.controls) this.controls.enabled = false; // Disable orbit controls only during vector drag
         this.startPos = intersectPoint.clone();
 
         this.markerMesh.position.copy(this.startPos);

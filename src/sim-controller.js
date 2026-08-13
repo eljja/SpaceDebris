@@ -21,7 +21,12 @@ export class SimulationController {
     this.sound = new SoundEngine();
 
     this.domElement = sceneManager.getRenderer().domElement;
-    this.placer = new DebrisPlacer(sceneManager.getScene(), sceneManager.getCamera(), this.domElement);
+    this.placer = new DebrisPlacer(
+      sceneManager.getScene(),
+      sceneManager.getCamera(),
+      this.domElement,
+      sceneManager.getControls()
+    );
     this.inputPanel = new DebrisInputPanel();
 
     this.simMesh = null; // InstancedMesh for simulation particles
