@@ -118,6 +118,9 @@ export class SimulationController {
     for (let i = 0; i < count; i++) {
       const p = particles[i];
       dummy.position.set(p.position.x, p.position.y, p.position.z);
+      // Scale instance visually according to its physical characteristic size (L_c)
+      const sizeScale = Math.max(3, Math.min(18, (p.size || 0.1) * 12));
+      dummy.scale.set(sizeScale, sizeScale, sizeScale);
       dummy.updateMatrix();
       this.simMesh.setMatrixAt(i, dummy.matrix);
     }
@@ -159,16 +162,27 @@ export class SimulationController {
     const pos = { x: posVector.x, y: posVector.y, z: posVector.z };
     const vel = { vx: tangent.x, vy: tangent.y, vz: tangent.z };
 
+    // Get object metadata if available to estimate parent mass
+    let targetMass = 500;
+    if (window.app && window.app.dataLoader) {
+      const obj = window.app.dataLoader.getObjects()[index];
+      if (obj) {
+        if (obj.rcsSize === 'LARGE') targetMass = 1800;
+        else if (obj.rcsSize === 'MEDIUM') targetMass = 450;
+        else if (obj.rcsSize === 'SMALL') targetMass = 80;
+      }
+    }
+
     // Enable sim mode if not active
     if (!this.simActive) {
       this.setSimActive(true);
       document.getElementById('btn-toggle-sim')?.click();
     }
 
-    // Trigger fragmentation
-    this.simulator.triggerExplosion(pos, vel, fragmentCount, 1.5);
+    // Trigger fragmentation with estimated mass
+    const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, 1.5);
     this.vfx.triggerExplosion(pos, 1.5);
     this.sound.playExplosion(1.5);
-    this.uiManager.setStatus(`💥 TARGET DESTROYED! ${fragmentCount} fragments generated!`);
+    this.uiManager.setStatus(`💥 TARGET DESTROYED! (${targetMass}kg) ${createdCount} fragments generated!`);
   }
 }

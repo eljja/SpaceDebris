@@ -69,12 +69,12 @@ export class KesslerSimulator {
    * Fragments are given a collision immunity timer so they don't
    * instantly re-collide with each other.
    */
-  triggerExplosion(position, velocity, fragmentCount = 50, energyScale = 1.0) {
+  triggerExplosion(position, velocity, targetMass = 500, fragmentCount = 50, energyScale = 1.0) {
     // Cap fragment count to prevent performance issues
     const cappedCount = Math.min(fragmentCount, 200);
 
     const parentObj = {
-      mass: 500,
+      mass: targetMass,
       position: { ...position },
       velocity: { ...velocity }
     };
