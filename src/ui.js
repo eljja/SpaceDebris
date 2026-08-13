@@ -82,14 +82,35 @@ export class UIManager {
       window.lucide.createIcons();
     }
 
+    // Auto-hide panels on mobile load for unobstructed view
+    if (window.innerWidth <= 768) {
+      this.elements.panelLeft?.classList.add('hidden');
+      this.elements.panelRight?.classList.add('hidden');
+    }
+
     // Toggle Left Panel
     this.elements.btnToggleLeft?.addEventListener('click', () => {
-      this.elements.panelLeft.classList.toggle('hidden');
+      this.elements.panelLeft?.classList.toggle('hidden');
+    });
+    document.getElementById('btn-close-left')?.addEventListener('click', () => {
+      this.elements.panelLeft?.classList.add('hidden');
     });
 
     // Toggle Right Panel
     this.elements.btnToggleRight?.addEventListener('click', () => {
-      this.elements.panelRight.classList.toggle('hidden');
+      this.elements.panelRight?.classList.toggle('hidden');
+    });
+    document.getElementById('btn-close-right')?.addEventListener('click', () => {
+      this.elements.panelRight?.classList.add('hidden');
+    });
+
+    // Status Bar Collapse / Expand
+    const statusBar = document.getElementById('status-bar');
+    document.getElementById('btn-collapse-bottom')?.addEventListener('click', () => {
+      statusBar?.classList.add('collapsed');
+    });
+    document.getElementById('btn-expand-bottom')?.addEventListener('click', () => {
+      statusBar?.classList.remove('collapsed');
     });
 
     // Filter checkboxes

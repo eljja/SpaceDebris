@@ -106,9 +106,13 @@
 
     <!-- Left Panel: Controls & Filters -->
     <aside id="panel-left" class="panel panel-left glass-card">
+      <div class="panel-drag-handle"></div>
       <div class="panel-header">
         <i data-lucide="sliders-horizontal"></i>
         <h2>Controls &amp; Filters</h2>
+        <button class="btn-close-panel" id="btn-close-left" title="Close Panel">
+          <i data-lucide="x"></i>
+        </button>
       </div>
 
       <!-- Search -->
@@ -228,9 +232,13 @@
 
     <!-- Right Panel: Object Details -->
     <aside id="panel-right" class="panel panel-right glass-card">
+      <div class="panel-drag-handle"></div>
       <div class="panel-header">
         <i data-lucide="satellite"></i>
         <h2>Object Details</h2>
+        <button class="btn-close-panel" id="btn-close-right" title="Close Panel">
+          <i data-lucide="x"></i>
+        </button>
       </div>
 
       <div id="detail-placeholder" class="detail-placeholder">
@@ -335,8 +343,14 @@
       </div>
       <div class="status-right">
         <span id="status-update">Data: —</span>
+        <button class="btn-collapse-bottom" id="btn-collapse-bottom" title="Minimize Status Bar">
+          <i data-lucide="chevron-down"></i>
+        </button>
       </div>
     </footer>
+    <button class="btn-expand-bottom" id="btn-expand-bottom" title="Expand Status Bar">
+      <i data-lucide="chevron-up"></i>
+    </button>
   </div>
 
   <script type="module" src="./src/main.js"></script>

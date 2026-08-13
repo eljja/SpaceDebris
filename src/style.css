@@ -312,6 +312,16 @@ html, body {
 .panel::-webkit-scrollbar-track { background: transparent; }
 .panel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
 
+.panel-drag-handle {
+  display: none;
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  margin: 0 auto 12px auto;
+  cursor: pointer;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -326,6 +336,21 @@ html, body {
   font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+.btn-close-panel {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+.btn-close-panel:hover {
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ---------- Control Groups ---------- */
@@ -577,8 +602,16 @@ html, body {
   backdrop-filter: blur(16px);
   border-top: 1px solid var(--glass-border);
   font-size: 0.72rem;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.status-left, .status-right { flex-shrink: 0; }
+.status-bar.collapsed {
+  transform: translateY(100%);
+}
+.status-left, .status-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
 .status-center { color: var(--dim); }
 .sim-time {
   font-family: var(--font-mono);
@@ -588,6 +621,50 @@ html, body {
 #status-update {
   font-family: var(--font-mono);
   color: var(--dim);
+}
+.btn-collapse-bottom {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+.btn-collapse-bottom:hover {
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.1);
+}
+.btn-expand-bottom {
+  display: none;
+  position: fixed;
+  bottom: 12px;
+  right: 16px;
+  z-index: 101;
+  background: rgba(4, 8, 18, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
+  transition: transform 0.2s, background 0.2s;
+}
+.btn-expand-bottom:hover {
+  transform: scale(1.1);
+  background: rgba(0, 229, 255, 0.2);
+}
+.status-bar.collapsed + .btn-expand-bottom,
+.status-bar.collapsed ~ .btn-expand-bottom {
+  display: flex;
 }
 
 /* ---------- Responsive ---------- */
@@ -601,12 +678,23 @@ html, body {
     bottom: 0;
     left: 0;
     right: 0;
-    max-height: 55vh;
+    max-height: 48vh;
     border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
   }
+  .panel-drag-handle { display: block; }
+  .btn-close-panel { display: inline-flex; }
   .panel-left.hidden  { transform: translateY(100%); }
   .panel-right.hidden { transform: translateY(100%); }
   .header-metrics { display: none; }
+
+  .status-bar {
+    padding: 0 10px;
+    font-size: 0.68rem;
+  }
+  .status-center {
+    display: none;
+  }
 }
 
 /* ---------- Simulation Overlay & Forms ---------- */
