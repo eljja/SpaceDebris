@@ -27,12 +27,12 @@ export class Earth {
       map: textureLoader.load('./data/textures/earth-blue-marble.jpg'),
       specularMap: textureLoader.load('./data/textures/earth-water.png'),
       bumpMap: textureLoader.load('./data/textures/earth-topology.png'),
-      bumpScale: 5,
-      specular: new THREE.Color(0x444444),
-      shininess: 25,
+      bumpScale: 3,
+      specular: new THREE.Color(0x222222), // Soft, non-blinding specular
+      shininess: 15,
       emissiveMap: textureLoader.load('./data/textures/earth-night.png'),
-      emissive: new THREE.Color(0xffe0a0), // Warm golden city lights
-      emissiveIntensity: 0.95
+      emissive: new THREE.Color(0xffd580), // Warm golden city lights
+      emissiveIntensity: 0.8
     });
     
     this._earthMesh = new THREE.Mesh(geo, mat);
@@ -47,7 +47,7 @@ export class Earth {
     const mat = new THREE.LineBasicMaterial({
       color: 0x5588bb,
       transparent: true,
-      opacity: 0.22
+      opacity: 0.2
     });
     const r = this.radius * 1.002;
     const gridGroup = new THREE.Group();
@@ -89,7 +89,7 @@ export class Earth {
     // Equator highlight
     const eqPoints = [];
     const eqMat = new THREE.LineBasicMaterial({
-      color: 0x00e5ff, transparent: true, opacity: 0.3
+      color: 0x00e5ff, transparent: true, opacity: 0.25
     });
     for (let lng = 0; lng <= 360; lng += 2) {
       const theta = lng * (Math.PI / 180);
@@ -105,7 +105,7 @@ export class Earth {
   }
 
   _initAtmosphere() {
-    const atmoRadius = 6500;
+    const atmoRadius = 6480; // Closer fit to earth surface
     const geo = new THREE.SphereGeometry(atmoRadius, 64, 64);
 
     const mat = new THREE.ShaderMaterial({
@@ -123,10 +123,10 @@ export class Earth {
         varying vec3 vNormal;
         varying vec3 vViewDir;
         void main() {
-          float fresnel = 1.0 - dot(vNormal, vViewDir);
-          fresnel = pow(fresnel, 3.5);
-          vec3 color = mix(vec3(0.1, 0.4, 0.8), vec3(0.2, 0.8, 1.0), fresnel);
-          gl_FragColor = vec4(color, fresnel * 0.65);
+          float fresnel = 1.0 - max(0.0, dot(vNormal, vViewDir));
+          fresnel = pow(fresnel, 4.5); // Tight rim, eliminates wide limb glare
+          vec3 color = mix(vec3(0.05, 0.2, 0.45), vec3(0.0, 0.55, 0.85), fresnel);
+          gl_FragColor = vec4(color, fresnel * 0.3); // Soft, subtle haze
         }
       `,
       blending: THREE.AdditiveBlending,
@@ -140,13 +140,22 @@ export class Earth {
   }
 
   _initLights() {
-    // Sun directional light — daytime illumination
-    this._sunLight = new THREE.DirectionalLight(0xffffff, 0.95);
+    // 1. Sun directional light — gentle daytime illumination, not blinding
+    this._sunLight = new THREE.DirectionalLight(0xffffff, 0.7);
     this._sunLight.position.set(1, 0.3, 0.8).normalize();
     this.group.add(this._sunLight);
 
-    // Ambient light — brightened so night side map/continents are clearly visible
-    this._ambientLight = new THREE.AmbientLight(0x5577aa, 0.75);
+    // 2. Soft opposite fill light so night side map is clearly visible
+    this._nightFillLight = new THREE.DirectionalLight(0x7799cc, 0.5);
+    this._nightFillLight.position.set(-1, -0.3, -0.8).normalize();
+    this.group.add(this._nightFillLight);
+
+    // 3. Hemisphere light — rich sky & ground fill across the entire sphere
+    this._hemiLight = new THREE.HemisphereLight(0x99bbdd, 0x557799, 0.85);
+    this.group.add(this._hemiLight);
+
+    // 4. Ambient light — overall baseline brightness
+    this._ambientLight = new THREE.AmbientLight(0x6688aa, 0.45);
     this.group.add(this._ambientLight);
   }
 
