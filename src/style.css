@@ -787,13 +787,18 @@ html, body {
 /* ---------- Simulation Overlay & Forms ---------- */
 .sim-overlay {
   position: fixed;
-  top: calc(var(--header-h) + 20px);
+  top: calc(var(--header-h) + 14px);
   left: 50%;
   transform: translateX(-50%);
-  width: 440px;
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - var(--header-h) - 80px);
   z-index: 200;
-  padding: 20px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
   transition: opacity 0.3s ease, transform 0.3s ease;
+  overflow: hidden;
 }
 .sim-overlay.hidden {
   opacity: 0;
@@ -805,21 +810,27 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 .sim-panel-title {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 2px;
+  font-size: 0.85rem;
+  letter-spacing: 1.5px;
   color: var(--cyan);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
+.sim-panel-title svg { width: 16px; height: 16px; color: var(--amber); }
 .btn-close {
   background: none;
   border: none;
   color: var(--dim);
   font-size: 1.4rem;
   cursor: pointer;
+  line-height: 1;
 }
 .btn-close:hover { color: var(--white); }
 
@@ -829,12 +840,15 @@ html, body {
   background: rgba(0, 0, 0, 0.4);
   padding: 4px;
   border-radius: var(--radius-xs);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  overflow-x: auto;
 }
 .sim-tab {
   flex: 1;
-  padding: 6px 8px;
-  font-size: 0.72rem;
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 0.7rem;
   border: none;
   background: none;
   color: var(--gray);
@@ -845,17 +859,147 @@ html, body {
 .sim-tab.active {
   background: var(--cyan);
   color: var(--bg-void);
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.sim-tab-content { display: none; }
+.sim-tab-content {
+  display: none;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .sim-tab-content.active { display: block; }
 
 .sim-help-text {
-  font-size: 0.78rem;
-  color: var(--gray);
-  margin-bottom: 14px;
+  font-size: 0.74rem;
+  color: var(--dim);
+  margin-bottom: 12px;
   line-height: 1.4;
+}
+
+/* Scenarios Grid & Cards */
+.scenarios-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.scenario-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--red);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s, background 0.2s, border-color 0.2s;
+}
+.scenario-card:hover {
+  background: rgba(255, 23, 68, 0.06);
+  border-color: rgba(255, 23, 68, 0.4);
+  transform: translateY(-1px);
+}
+.sc-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.sc-num {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--amber);
+  background: rgba(255, 145, 0, 0.15);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.sc-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.sc-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.2;
+}
+.sc-sub {
+  font-size: 0.65rem;
+  color: var(--dim);
+  font-family: var(--font-mono);
+}
+.sc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sc-chip {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.chip-cyan   { background: rgba(0, 229, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.25); }
+.chip-amber  { background: rgba(255, 145, 0, 0.12); color: var(--amber); border: 1px solid rgba(255, 145, 0, 0.25); }
+.chip-purple { background: rgba(213, 0, 249, 0.12); color: var(--purple); border: 1px solid rgba(213, 0, 249, 0.25); }
+
+.sc-desc {
+  font-size: 0.7rem;
+  color: var(--gray);
+  line-height: 1.35;
+}
+.btn-run-scenario {
+  align-self: flex-end;
+  padding: 5px 12px;
+  font-size: 0.7rem;
+}
+
+/* Numerical Presets */
+.presets-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.btn-preset-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.btn-preset-chip:hover {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: var(--cyan);
+  transform: translateY(-1px);
+}
+.pr-name {
+  font-size: 0.68rem;
+  color: var(--white);
+  font-weight: 600;
+}
+.pr-tag {
+  font-size: 0.58rem;
+  background: rgba(255, 145, 0, 0.2);
+  color: var(--amber);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.preset-desc-box {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.05);
+  border-left: 2px solid var(--cyan);
+  padding: 6px 8px;
+  border-radius: 0 4px 4px 0;
+  transition: background 0.3s;
+}
+.preset-desc-box.highlight {
+  background: rgba(0, 229, 255, 0.2);
 }
 
 .form-grid {

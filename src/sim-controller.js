@@ -96,7 +96,38 @@ export class SimulationController {
       this.sound.playExplosion(energyScale);
     };
 
-    // 4. Listen to Physics Simulator Events
+    // 4. Scenario Execution Callback
+    this.inputPanel.onExecuteScenario = (scenarioData) => {
+      const { norad, frags, mass } = scenarioData;
+      if (!window.app || !window.app.dataLoader) return;
+
+      const objects = window.app.dataLoader.getObjects();
+      const targetIdx = objects.findIndex(o => String(o.NORAD_CAT_ID) === String(norad));
+
+      if (targetIdx !== -1) {
+        // Select & Zoom to target
+        window.app._selectObject(targetIdx);
+        window.app._zoomToObject(targetIdx);
+
+        // Explode target with realistic fragment count
+        setTimeout(() => {
+          this.explodeObject(targetIdx, frags);
+          this.inputPanel.hide();
+        }, 400);
+      } else {
+        // Fallback if specific object is decayed/unindexed
+        if (!this.simActive) this.setSimActive(true);
+        const pos = { x: 0, y: 7150, z: 0 };
+        const vel = { vx: 0, vy: 7.5, vz: 0 };
+        const createdCount = this.simulator.triggerExplosion(pos, vel, mass, frags, 1.5);
+        this.vfx.triggerExplosion(pos, 1.5);
+        this.sound.playExplosion(1.5);
+        this.inputPanel.hide();
+        this.uiManager.setStatus(`💥 SCENARIO TRIGGERED! ${createdCount} fragments generated!`);
+      }
+    };
+
+    // 5. Listen to Physics Simulator Events
     this.simulator.on('reentry', (data) => {
       this.vfx.triggerReentry(data.position, data.velocity);
       this.sound.playReentryBurn();
