@@ -20,7 +20,7 @@ export class PostProcessingManager {
     // Set linear color space & ACES Filmic tone mapping on base renderer
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.85;
+    this.renderer.toneMappingExposure = 1.0;
 
     // Create Composer with HalfFloatType for HDR color depth
     const renderTarget = new THREE.WebGLRenderTarget(
