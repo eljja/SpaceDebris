@@ -633,7 +633,7 @@ html, body {
 .detail-tag.tag-active  { background: rgba(0, 229, 255, 0.15); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3); }
 .detail-tag.tag-dead    { background: rgba(213, 0, 249, 0.15); color: var(--purple); border: 1px solid rgba(213, 0, 249, 0.3); }
 .detail-tag.tag-rocket  { background: rgba(255, 145, 0, 0.15); color: var(--amber); border: 1px solid rgba(255, 145, 0, 0.3); }
-.detail-tag.tag-debris  { background: rgba(255, 23, 68, 0.15); color: var(--red); border: 1px solid rgba(255, 23, 68, 0.3); }
+.detail-tag.tag-debris  { background: rgba(255, 255, 255, 0.15); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.35); }
 .detail-tag.tag-unknown { background: rgba(148, 163, 184, 0.15); color: var(--gray); border: 1px solid rgba(148, 163, 184, 0.3); }
 
 .detail-content h3 {

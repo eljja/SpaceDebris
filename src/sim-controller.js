@@ -66,7 +66,7 @@ export class SimulationController {
       }
       
       this.sound.playDebrisLaunch();
-      this.uiManager.setStatus(`🚀 Launched ${count} user-injected debris particles (Neon Green)!`);
+      this.uiManager.setStatus(`🚀 Launched ${count} user-injected debris particles (Red)!`);
     };
 
     // 2. Numerical Launch Callback
@@ -76,7 +76,7 @@ export class SimulationController {
         category: 'user_injected'
       });
       this.sound.playDebrisLaunch();
-      this.uiManager.setStatus(`🚀 Launched numerical particle (Neon Green)`);
+      this.uiManager.setStatus(`🚀 Launched numerical particle (Red)`);
     };
 
     // 3. Explosion Trigger Callback
@@ -124,9 +124,9 @@ export class SimulationController {
     this.simMesh.count = count;
 
     const dummy = new THREE.Object3D();
-    const colorUser = new THREE.Color(0x00ff88);   // Neon Electric Green (User Added)
-    const colorExplode = new THREE.Color(0xffea00); // Bright Yellow (Explosion)
-    const colorCascade = new THREE.Color(0xff1744); // Crimson Red (Collision Cascade)
+    const colorUser = new THREE.Color(0xff1744);    // Vibrant Crimson Red (User-Injected Debris)
+    const colorExplode = new THREE.Color(0xff5252); // Bright Red (Explosion Debris)
+    const colorCascade = new THREE.Color(0xff1744); // Crimson Red (Cascade Debris)
 
     for (let i = 0; i < count; i++) {
       const p = particles[i];

@@ -11,9 +11,9 @@ import * as satellite from 'satellite.js';
 const COLOR_ACTIVE  = new THREE.Color(0x00e5ff); // Cyan
 const COLOR_DEAD    = new THREE.Color(0xd500f9); // Purple
 const COLOR_ROCKET  = new THREE.Color(0xff9100); // Amber
-const COLOR_DEBRIS  = new THREE.Color(0x94a3b8); // Gray
-const COLOR_DEBRIS_L = new THREE.Color(0xff1744); // Red (large debris)
-const COLOR_UNKNOWN = new THREE.Color(0x667788); // Dim
+const COLOR_DEBRIS  = new THREE.Color(0xffffff); // Pure White (Real Space Debris)
+const COLOR_DEBRIS_L = new THREE.Color(0xffffff); // Pure White (Large Real Debris)
+const COLOR_UNKNOWN = new THREE.Color(0x94a3b8); // Dim Gray
 
 export class OrbitRenderer {
   constructor(scene, dataLoader) {

@@ -259,7 +259,7 @@ export class UIManager {
       active: '#00e5ff',
       dead: '#d500f9',
       rocket: '#ff9100',
-      debris: '#94a3b8'
+      debris: '#ffffff'
     };
 
     results.slice(0, 10).forEach(obj => {
