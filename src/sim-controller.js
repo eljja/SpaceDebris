@@ -136,6 +136,11 @@ export class SimulationController {
     this.simulator.on('collision', (data) => {
       this.vfx.triggerExplosion(data.position, 1.4);
       this.sound.playExplosion(1.5);
+
+      if (data.satelliteIndex !== undefined && this.orbitRenderer?.destroySatellite) {
+        this.orbitRenderer.destroySatellite(data.satelliteIndex);
+      }
+
       if (data.satelliteName) {
         this.uiManager.setStatus(`💥 CASCADE IMPACT #${data.totalCollisions}: [${data.satelliteName}] destroyed! (+${data.newFragments} fragments)`);
       } else {

@@ -31,6 +31,7 @@ export class OrbitRenderer {
     this.mesh = null;
     this.orbitPath = null;
     this.selectedObjectIndex = -1;
+    this.destroyedCatalogIndices = new Set(); // Registry of destroyed satellites
 
     this._buildSatrecs();
     this._buildMesh();
@@ -232,6 +233,15 @@ export class OrbitRenderer {
       const mi = this.indexToMesh.get(origIdx);
       if (mi === undefined) continue;
 
+      // If satellite was destroyed in simulation, keep it invisible
+      if (this.destroyedCatalogIndices.has(origIdx)) {
+        this.dummy.position.set(0, 0, 0);
+        this.dummy.scale.set(0, 0, 0);
+        this.dummy.updateMatrix();
+        this.mesh.setMatrixAt(mi, this.dummy.matrix);
+        continue;
+      }
+
       const satrec = this.satrecs[origIdx];
       if (!satrec) continue;
 
@@ -428,6 +438,18 @@ export class OrbitRenderer {
       this.orbitPath.material.dispose();
       this.orbitPath = null;
     }
+  destroySatellite(origIdx) {
+    this.destroyedCatalogIndices.add(origIdx);
+    const mi = this.indexToMesh.get(origIdx);
+    if (mi !== undefined && this.mesh) {
+      this.dummy.position.set(0, 0, 0);
+      this.dummy.scale.set(0, 0, 0);
+      this.dummy.updateMatrix();
+      this.mesh.setMatrixAt(mi, this.dummy.matrix);
+      this.mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
   /**
    * Finds the first visible catalog satellite within radiusKm of a 3D position
    * Used for real-time Kessler collision detection.
@@ -443,6 +465,8 @@ export class OrbitRenderer {
     const step = list.length > 3000 ? 2 : 1; // Performance sampling for huge catalogs
     for (let i = 0; i < list.length; i += step) {
       const origIdx = list[i];
+      if (this.destroyedCatalogIndices.has(origIdx)) continue; // Skip already destroyed
+
       const mi = this.indexToMesh.get(origIdx);
       if (mi === undefined) continue;
 

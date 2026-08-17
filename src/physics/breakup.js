@@ -176,6 +176,10 @@ export class BreakupModel {
       const pyT = parentMass * parentVel.vy;
       const pzT = parentMass * parentVel.vz;
 
+      const dpx = pxT - pxA;
+      const dpy = pyT - pyA;
+      const dpz = pzT - pzA;
+
       // Uniform momentum correction delta-V: dv = deltaP / parentMass
       const dvCorrX = dpx / parentMass;
       const dvCorrY = dpy / parentMass;
