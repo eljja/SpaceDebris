@@ -234,7 +234,13 @@ export class DebrisInputPanel {
     panel.innerHTML = `
       <div class="sim-panel-header">
         <span class="sim-panel-title"><i data-lucide="zap"></i> KESSLER SIMULATION ENGINE</span>
-        <button id="btn-close-sim" class="btn-close">&times;</button>
+        <div class="sim-panel-header-right" style="display:flex; align-items:center; gap:10px;">
+          <div class="sim-live-badge" style="background:rgba(255,23,68,0.15); border:1px solid rgba(255,23,68,0.35); padding:2px 8px; border-radius:4px; font-size:0.7rem; font-family:var(--font-mono); color:var(--white);">
+            <span>💥 Cascades: </span>
+            <strong id="sim-hud-collisions" style="color:#ff5252; font-weight:700;">0</strong>
+          </div>
+          <button id="btn-close-sim" class="btn-close">&times;</button>
+        </div>
       </div>
 
       <!-- Mode Tabs -->
@@ -442,6 +448,13 @@ export class DebrisInputPanel {
         this.onExplodeTarget(energyJ);
       }
     });
+  }
+
+  updateLiveStats(stats, activeCount) {
+    const elCol = document.getElementById('sim-hud-collisions');
+    if (elCol && stats) {
+      elCol.textContent = (stats.collisions || 0).toLocaleString();
+    }
   }
 
   show() {

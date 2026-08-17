@@ -393,9 +393,9 @@ class SpaceDebrisApp {
     const total = this.dataLoader.getObjects().length;
     const visible = this.lodController.getVisibleCount();
     const lodLevel = this.lodController.getCurrentLevel();
-    this.ui.setMetrics(total, visible, lodLevel);
-
     const cascades = this.simController?.simulator?.stats?.collisions || 0;
+
+    this.ui.setMetrics(total, visible, lodLevel, cascades);
     this.ui.setTelemetryData(
       this.orbitCounts.leo,
       this.orbitCounts.meo,

@@ -11,6 +11,7 @@ export class UIManager {
       metricTracked: document.getElementById('metric-tracked'),
       metricVisible: document.getElementById('metric-visible'),
       metricLod: document.getElementById('metric-lod'),
+      metricCascades: document.getElementById('metric-cascades'),
       statusText: document.getElementById('status-text'),
       btnToggleLeft: document.getElementById('btn-toggle-left'),
       btnToggleRight: document.getElementById('btn-toggle-right'),
@@ -209,10 +210,11 @@ export class UIManager {
     if (this.elements.countDebris) this.elements.countDebris.textContent = (counts.debris || 0).toLocaleString();
   }
 
-  setMetrics(tracked, visible, lodLevel) {
+  setMetrics(tracked, visible, lodLevel, cascades = 0) {
     if (this.elements.metricTracked) this.elements.metricTracked.textContent = tracked.toLocaleString();
     if (this.elements.metricVisible) this.elements.metricVisible.textContent = visible.toLocaleString();
     if (this.elements.metricLod) this.elements.metricLod.textContent = `L${lodLevel}`;
+    if (this.elements.metricCascades) this.elements.metricCascades.textContent = cascades.toLocaleString();
   }
 
   setNavCounter(currentPos, totalCount) {

@@ -428,6 +428,41 @@ export class OrbitRenderer {
       this.orbitPath.material.dispose();
       this.orbitPath = null;
     }
-    this.selectedObjectIndex = -1;
+  /**
+   * Finds the first visible catalog satellite within radiusKm of a 3D position
+   * Used for real-time Kessler collision detection.
+   */
+  findNearbySatellite(position, radiusKm = 35.0) {
+    if (!position || !this.visibleIndicesList || this.visibleIndicesList.length === 0) return null;
+    const thresholdSq = radiusKm * radiusKm;
+    const targetPos = new THREE.Vector3();
+    const mat = new THREE.Matrix4();
+    const pVec = new THREE.Vector3(position.x, position.y, position.z);
+
+    const list = this.visibleIndicesList;
+    const step = list.length > 3000 ? 2 : 1; // Performance sampling for huge catalogs
+    for (let i = 0; i < list.length; i += step) {
+      const origIdx = list[i];
+      const mi = this.indexToMesh.get(origIdx);
+      if (mi === undefined) continue;
+
+      this.mesh.getMatrixAt(mi, mat);
+      targetPos.setFromMatrixPosition(mat);
+
+      if (targetPos.lengthSq() < 1000) continue;
+
+      const distSq = targetPos.distanceToSquared(pVec);
+      if (distSq <= thresholdSq) {
+        const obj = this.dataLoader.getObjects()[origIdx];
+        if (obj) {
+          return {
+            ...obj,
+            index: origIdx,
+            position: { x: targetPos.x, y: targetPos.y, z: targetPos.z }
+          };
+        }
+      }
+    }
+    return null;
   }
 }

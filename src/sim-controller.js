@@ -134,17 +134,27 @@ export class SimulationController {
     });
 
     this.simulator.on('collision', (data) => {
-      this.vfx.triggerExplosion(data.position, 1.2);
+      this.vfx.triggerExplosion(data.position, 1.4);
       this.sound.playExplosion(1.5);
-      this.uiManager.setStatus(`💥 COLLISION DETECTED! ${data.newFragments} fragments generated!`);
+      if (data.satelliteName) {
+        this.uiManager.setStatus(`💥 CASCADE IMPACT #${data.totalCollisions}: [${data.satelliteName}] destroyed! (+${data.newFragments} fragments)`);
+      } else {
+        this.uiManager.setStatus(`💥 CASCADE COLLISION #${data.totalCollisions}: Debris fragments collided! (+${data.newFragments} fragments)`);
+      }
     });
   }
 
   update(deltaTimeSec) {
     if (!this.simActive) return;
 
-    // 1. Step physics loop (no time multiplier to avoid cascade amplification)
-    const result = this.simulator.step(deltaTimeSec);
+    // 1. Step physics loop with real-time catalog satellite collision check
+    const catalogCheckFn = (pos, radius) => this.orbitRenderer ? this.orbitRenderer.findNearbySatellite(pos, radius) : null;
+    const result = this.simulator.step(deltaTimeSec, catalogCheckFn);
+
+    // Update simulation overlay modal live counters
+    if (this.inputPanel?.updateLiveStats) {
+      this.inputPanel.updateLiveStats(this.simulator.stats, this.simulator.particles.length);
+    }
 
     // 2. Update VFX
     this.vfx.update(deltaTimeSec);
