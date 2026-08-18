@@ -17,15 +17,15 @@ export class KesslerSimulator {
       reentry: [],
       collision: []
     };
-    this.maxParticles = 1500;
-    this.maxCollisionsPerFrame = 1; // Strict 1 collision per frame for smooth 60fps
+    this.maxParticles = 2500;
+    this.maxCollisionsPerFrame = 2;
     this.maxSubSteps = 4;
     this.maxStepDt = 2.0;
 
     // Sector cooldowns to prevent localized chain reaction freezes
     this.sectorCooldowns = new Map();
     this.lastCollisionTime = 0;
-    this.minCollisionIntervalMs = 180; // Minimum 180ms between any collision events
+    this.minCollisionIntervalMs = 40; // 40ms allows rapid cascading without freeze
 
     this.stats = {
       collisions: 0,
@@ -176,7 +176,7 @@ export class KesslerSimulator {
     }
 
     const positions = this.particles.map(p => p.position);
-    const collisions = this.spatialHash.findCollisions(positions, 28.0);
+    const collisions = this.spatialHash.findCollisions(positions, 36.0);
 
     const toRemove = new Set();
     let processedCount = 0;
@@ -196,16 +196,16 @@ export class KesslerSimulator {
           continue;
         }
 
-        // RULE 2: SECTOR COOLDOWN — Max 1 collision per 120km sector every 2.5 seconds
+        // RULE 2: SECTOR COOLDOWN — 300ms cooldown per sector to throttle without blocking
         const sectorKey = this._getSectorKey(pA.position);
         if (this.sectorCooldowns.get(sectorKey) > nowTime) {
           continue;
         }
 
-        // RULE 3: GENERATION CAP — Max 4 cascade generations to prevent runaway loops
+        // RULE 3: GENERATION CAP — Up to 10 cascade generations
         const genA = pA.generation || 1;
         const genB = pB.generation || 1;
-        if (genA > 4 || genB > 4) continue;
+        if (genA > 10 || genB > 10) continue;
 
         toRemove.add(idxA);
         toRemove.add(idxB);
@@ -215,13 +215,13 @@ export class KesslerSimulator {
         const frags = BreakupModel.collide(pA, pB, 18);
 
         for (const f of frags) {
-          f.immuneTimer = 1.0;
+          f.immuneTimer = 0.8;
           this.addParticle(f, cascadeSourceId, nextGen);
         }
 
         this.stats.collisions++;
         this.lastCollisionTime = nowTime;
-        this.sectorCooldowns.set(sectorKey, nowTime + 2500); // 2.5s sector cooldown
+        this.sectorCooldowns.set(sectorKey, nowTime + 300); // 300ms sector cooldown
 
         this.emit('collision', {
           position: pA.position,
@@ -247,7 +247,7 @@ export class KesslerSimulator {
         const sectorKey = this._getSectorKey(p.position);
         if (this.sectorCooldowns.get(sectorKey) > nowTime) continue;
 
-        const struckSatellite = catalogCollisionCheckFn(p.position, 32.0);
+        const struckSatellite = catalogCollisionCheckFn(p.position, 45.0);
         if (struckSatellite) {
           toRemove.add(i);
 
@@ -261,14 +261,14 @@ export class KesslerSimulator {
 
           const frags = BreakupModel.collide(p, satObj, 22);
           for (const f of frags) {
-            f.immuneTimer = 1.0;
+            f.immuneTimer = 0.8;
             this.addParticle(f, cascadeSourceId, (p.generation || 1) + 1);
           }
 
           this.stats.collisions++;
           this.stats.destroyedSatellites++;
           this.lastCollisionTime = nowTime;
-          this.sectorCooldowns.set(sectorKey, nowTime + 2500);
+          this.sectorCooldowns.set(sectorKey, nowTime + 300);
 
           this.emit('collision', {
             position: p.position,

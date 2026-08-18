@@ -453,39 +453,68 @@ export class OrbitRenderer {
   }
 
   /**
-   * Finds the first visible catalog satellite within radiusKm of a 3D position
-   * Used for real-time Kessler collision detection.
+   * Finds the first catalog satellite or debris object within radiusKm of a 3D position
+   * Checks across the full catalog by filtering matching altitude shells.
    */
-  findNearbySatellite(position, radiusKm = 35.0) {
-    if (!position || !this.visibleIndicesList || this.visibleIndicesList.length === 0) return null;
+  findNearbySatellite(position, radiusKm = 45.0) {
+    if (!position || !this.validMap || this.validMap.length === 0) return null;
     const thresholdSq = radiusKm * radiusKm;
+    const pVec = new THREE.Vector3(position.x, position.y, position.z);
+    const pDist = pVec.length();
+    const pAlt = pDist - 6371;
+
     const targetPos = new THREE.Vector3();
     const mat = new THREE.Matrix4();
-    const pVec = new THREE.Vector3(position.x, position.y, position.z);
+    const now = new Date();
 
-    const list = this.visibleIndicesList;
-    const step = list.length > 3000 ? 2 : 1; // Performance sampling for huge catalogs
-    for (let i = 0; i < list.length; i += step) {
-      const origIdx = list[i];
+    // Check across the valid catalog
+    const allObjects = this.dataLoader.getObjects();
+    const totalValid = this.validMap.length;
+
+    for (let vi = 0; vi < totalValid; vi++) {
+      const origIdx = this.validMap[vi];
       if (this.destroyedCatalogIndices.has(origIdx)) continue; // Skip already destroyed
 
+      const obj = allObjects[origIdx];
+      if (!obj) continue;
+
+      // Fast altitude filter: skip if object orbit altitude range is far away (>80km)
+      const apo = obj.apo || 600;
+      const peri = obj.peri || 500;
+      if (pAlt < (peri - 80) || pAlt > (apo + 80)) continue;
+
       const mi = this.indexToMesh.get(origIdx);
-      if (mi === undefined) continue;
+      if (mi !== undefined && this.mesh) {
+        this.mesh.getMatrixAt(mi, mat);
+        targetPos.setFromMatrixPosition(mat);
 
-      this.mesh.getMatrixAt(mi, mat);
-      targetPos.setFromMatrixPosition(mat);
+        if (targetPos.lengthSq() > 1000) {
+          const distSq = targetPos.distanceToSquared(pVec);
+          if (distSq <= thresholdSq) {
+            return {
+              ...obj,
+              index: origIdx,
+              position: { x: targetPos.x, y: targetPos.y, z: targetPos.z }
+            };
+          }
+          continue;
+        }
+      }
 
-      if (targetPos.lengthSq() < 1000) continue;
-
-      const distSq = targetPos.distanceToSquared(pVec);
-      if (distSq <= thresholdSq) {
-        const obj = this.dataLoader.getObjects()[origIdx];
-        if (obj) {
-          return {
-            ...obj,
-            index: origIdx,
-            position: { x: targetPos.x, y: targetPos.y, z: targetPos.z }
-          };
+      // If not in currently rendered mesh LOD, evaluate SGP4 on the fly for altitude-matched candidates
+      const satrec = this.satrecs[origIdx];
+      if (satrec) {
+        const pv = satellite.propagate(satrec, now);
+        if (pv.position && isFinite(pv.position.x)) {
+          targetPos.set(pv.position.x, pv.position.z, -pv.position.y);
+          const distSq = targetPos.distanceToSquared(pVec);
+          if (distSq <= thresholdSq) {
+            return {
+              ...obj,
+              index: origIdx,
+              position: { x: targetPos.x, y: targetPos.y, z: targetPos.z }
+            };
+          }
         }
       }
     }
