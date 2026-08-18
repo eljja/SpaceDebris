@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="spaceGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0b1329" />
+      <stop offset="100%" stop-color="#020408" />
+    </radialGradient>
+    <linearGradient id="earthGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00e5ff" />
+      <stop offset="50%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="128" height="128" rx="28" fill="url(#spaceGrad)" />
+  <rect width="128" height="128" rx="28" fill="none" stroke="#00e5ff" stroke-opacity="0.3" stroke-width="2" />
+
+  <!-- Background Stars -->
+  <circle cx="28" cy="32" r="1" fill="#ffffff" opacity="0.6" />
+  <circle cx="100" cy="24" r="1.5" fill="#00e5ff" opacity="0.8" />
+  <circle cx="95" cy="105" r="1" fill="#ffffff" opacity="0.5" />
+  <circle cx="22" cy="98" r="1.2" fill="#00e5ff" opacity="0.7" />
+
+  <!-- Earth Globe -->
+  <circle cx="64" cy="64" r="30" fill="url(#earthGrad)" />
+  <circle cx="64" cy="64" r="30" fill="none" stroke="#00e5ff" stroke-width="1.5" stroke-opacity="0.6" />
+  <circle cx="64" cy="64" r="32" fill="none" stroke="#00e5ff" stroke-width="1" stroke-opacity="0.3" filter="url(#glow)" />
+
+  <!-- Orbital Ring 1 (Tilted Ellipse) -->
+  <ellipse cx="64" cy="64" rx="48" ry="18" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-dasharray="6 3" transform="rotate(-28 64 64)" filter="url(#glow)" opacity="0.9" />
+
+  <!-- Orbital Ring 2 (Cross Track) -->
+  <ellipse cx="64" cy="64" rx="44" ry="14" fill="none" stroke="#ff1744" stroke-width="1.5" stroke-dasharray="3 3" transform="rotate(42 64 64)" opacity="0.7" />
+
+  <!-- Orbiting Satellite (Cyan) -->
+  <circle cx="104" cy="44" r="4.5" fill="#ffffff" stroke="#00e5ff" stroke-width="2" filter="url(#glow)" />
+
+  <!-- Orbiting Debris Particle (Red) -->
+  <circle cx="34" cy="86" r="3" fill="#ff1744" stroke="#ffffff" stroke-width="1" filter="url(#glow)" />
+</svg>
