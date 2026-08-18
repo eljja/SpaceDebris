@@ -438,6 +438,8 @@ export class OrbitRenderer {
       this.orbitPath.material.dispose();
       this.orbitPath = null;
     }
+  }
+
   destroySatellite(origIdx) {
     this.destroyedCatalogIndices.add(origIdx);
     const mi = this.indexToMesh.get(origIdx);
