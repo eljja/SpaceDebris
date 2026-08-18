@@ -248,6 +248,9 @@ export class SimulationController {
       document.getElementById('btn-toggle-sim')?.click();
     }
 
+    // Destroy parent satellite on 3D globe so it vanishes upon explosion
+    this.orbitRenderer.destroySatellite(index);
+
     // Trigger fragmentation with estimated mass
     const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, 1.5);
     this.vfx.triggerExplosion(pos, 1.5);
