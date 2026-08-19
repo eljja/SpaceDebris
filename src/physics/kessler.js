@@ -19,8 +19,8 @@ export class KesslerSimulator {
     };
     this.maxParticles = 2500;
     this.maxCollisionsPerFrame = 3;
-    this.maxSubSteps = 4;
-    this.maxStepDt = 2.0;
+    this.maxSubSteps = 50;   // Increased to support up to 86400x time warp
+    this.maxStepDt = 30.0;   // Verlet integration is stable up to 30s for LEO
 
     // Sector cooldowns to prevent localized re-explosion storms
     this.sectorCooldowns = new Map();
