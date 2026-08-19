@@ -387,6 +387,38 @@ export class OrbitRenderer {
     return null;
   }
 
+  /**
+   * Computes the actual orbital velocity vector via SGP4 numerical differentiation.
+   * Uses central difference: v ≈ (r(t+dt) - r(t-dt)) / (2*dt)
+   * This preserves the true orbital inclination and angular momentum direction.
+   * Returns velocity in km/s in Three.js coordinate space.
+   */
+  getObjectVelocity(index) {
+    const satrec = this.satrecs[index];
+    if (!satrec) return null;
+
+    const now = new Date();
+    const dtMs = 500; // 0.5 second offset for central difference
+    const dtSec = dtMs / 1000;
+
+    const tBefore = new Date(now.getTime() - dtMs);
+    const tAfter  = new Date(now.getTime() + dtMs);
+
+    const pvBefore = satellite.propagate(satrec, tBefore);
+    const pvAfter  = satellite.propagate(satrec, tAfter);
+
+    if (!pvBefore.position || !pvAfter.position) return null;
+    if (!isFinite(pvBefore.position.x) || !isFinite(pvAfter.position.x)) return null;
+
+    // ECI -> Three.js: X=ECI.x, Y=ECI.z, Z=-ECI.y
+    const dt2 = 2 * dtSec;
+    const vx = (pvAfter.position.x - pvBefore.position.x) / dt2;
+    const vy = (pvAfter.position.z - pvBefore.position.z) / dt2; // ECI.z -> Three.js Y
+    const vz = -(pvAfter.position.y - pvBefore.position.y) / dt2; // -ECI.y -> Three.js Z
+
+    return new THREE.Vector3(vx, vy, vz);
+  }
+
   showOrbitPath(objectIndex) {
     this.selectedObjectIndex = objectIndex;
     this.clearOrbitPath();

@@ -34,9 +34,10 @@ export class BreakupModel {
    * @param {Object} parentObj - { mass (kg), position: {x,y,z}, velocity: {vx,vy,vz} }
    * @param {number} explosionEnergyJ - Explosion energy in Joules
    * @param {number} maxFragments - Performance cap (default 200)
+   * @param {string} breakupType - 'explosion' or 'collision' (controls A/m distribution)
    * @returns {Array<Object>} Generated fragment objects (only trackable/chain-reaction size)
    */
-  static explode(parentObj, explosionEnergyJ = 1e8, maxFragments = 200) {
+  static explode(parentObj, explosionEnergyJ = 1e8, maxFragments = 200, breakupType = 'explosion') {
     const parentMass = parentObj.mass || 500;
     const parentPos = { ...parentObj.position };
     const parentVel = { ...parentObj.velocity };
@@ -79,8 +80,24 @@ export class BreakupModel {
       // Cross-sectional area: A = 0.5569 · L_c^2.0047
       const area = 0.5569 * Math.pow(L_c, 2.0047);
 
-      // Area-to-Mass ratio (log-normal, centered -0.6 with σ=0.4)
-      const logAM = -0.6 + this._gaussianRandom() * 0.4;
+      // Area-to-Mass ratio: NASA bimodal log-normal distribution
+      // Explosions and collisions have distinct A/m distributions (Johnson et al., 2001)
+      let logAM;
+      if (breakupType === 'collision') {
+        // Collision: wider bimodal spread
+        if (Math.random() < 0.6) {
+          logAM = -0.45 + this._gaussianRandom() * 0.2;  // Mode 1: larger, lighter fragments
+        } else {
+          logAM = -1.5  + this._gaussianRandom() * 0.5;  // Mode 2: denser, heavier fragments
+        }
+      } else {
+        // Explosion: tighter bimodal
+        if (Math.random() < 0.7) {
+          logAM = -0.6 + this._gaussianRandom() * 0.1;   // Mode 1: standard spacecraft panels
+        } else {
+          logAM = -1.2 + this._gaussianRandom() * 0.3;   // Mode 2: structural members
+        }
+      }
       const areaToMass = Math.pow(10, logAM);
 
       const mass = area / areaToMass;
@@ -258,7 +275,7 @@ export class BreakupModel {
       velocity: vCom
     };
 
-    return this.explode(collisionParent, energyJ, effectiveMax);
+    return this.explode(collisionParent, energyJ, effectiveMax, 'collision');
   }
 
   /**

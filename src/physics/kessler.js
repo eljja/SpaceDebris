@@ -176,7 +176,8 @@ export class KesslerSimulator {
     }
 
     const positions = this.particles.map(p => p.position);
-    const collisions = this.spatialHash.findCollisions(positions, 36.0);
+    const velocities = this.particles.map(p => p.velocity);
+    const collisions = this.spatialHash.findCollisions(positions, 36.0, velocities, dtSec);
 
     const toRemove = new Set();
     let processedCount = 0;

@@ -82,7 +82,7 @@ export class DataLoader {
                 const incl = parseFloat(satcatData.incl) || 51.6;
                 const apo = parseFloat(satcatData.apo) || 500;
                 const peri = parseFloat(satcatData.peri) || 500;
-                const a = 6371 + (apo + peri) / 2;
+                const a = 6378.137 + (apo + peri) / 2; // WGS84 equatorial radius
                 const ecc = (apo > peri) ? Math.min(0.25, (apo - peri) / (2 * a)) : 0.001;
 
                 gpItem = {

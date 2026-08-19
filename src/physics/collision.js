@@ -33,15 +33,21 @@ export class SpatialHashGrid {
   }
 
   /**
-   * Finds pairs of objects whose distance is less than thresholdKm across 27 neighbor cells
-   * @param {Array<Object>} positions - Array of {x, y, z} positions
-   * @param {number} thresholdKm - Distance threshold for collision (default 30 km)
+   * Finds pairs of objects whose minimum distance during the frame is less than thresholdKm.
+   * Uses CPA (Closest Point of Approach) linear swept-sphere test to prevent tunneling
+   * at relative velocities up to 15 km/s.
+   *
+   * @param {Array<Object>} positions - Current {x, y, z} positions (km)
+   * @param {number} thresholdKm - Distance threshold for collision
+   * @param {Array<Object>} [velocities] - Optional {vx, vy, vz} velocities (km/s) for CPA
+   * @param {number} [dtSec] - Frame dt in seconds for swept test
    * @returns {Array<Array<number>>} Array of index pairs [idxA, idxB]
    */
-  findCollisions(positions, thresholdKm = 30.0) {
+  findCollisions(positions, thresholdKm = 30.0, velocities = null, dtSec = 0) {
     const collisions = [];
     const thresholdSq = thresholdKm * thresholdKm;
     const checkedPairs = new Set();
+    const useCPA = velocities && dtSec > 0;
 
     for (const [key, cell] of this.grid.entries()) {
       const parts = key.split(',').map(Number);
@@ -75,6 +81,7 @@ export class SpatialHashGrid {
                 const posB = positions[idxB];
                 if (!posB) continue;
 
+                // Discrete distance check first (fast path)
                 const dx = posA.x - posB.x;
                 const dy = posA.y - posB.y;
                 const dz = posA.z - posB.z;
@@ -82,6 +89,39 @@ export class SpatialHashGrid {
 
                 if (distSq <= thresholdSq) {
                   collisions.push([idxA, idxB]);
+                  continue;
+                }
+
+                // CPA swept-sphere test: check if minimum distance during [0, dt] < threshold
+                // Prevents tunneling at high relative velocities (up to 15 km/s)
+                if (useCPA) {
+                  const velA = velocities[idxA];
+                  const velB = velocities[idxB];
+                  if (!velA || !velB) continue;
+
+                  // Relative velocity: dv = vA - vB
+                  const dvx = velA.vx - velB.vx;
+                  const dvy = velA.vy - velB.vy;
+                  const dvz = velA.vz - velB.vz;
+
+                  const dvDotDr = dvx * dx + dvy * dy + dvz * dz;
+                  const dvDotDv = dvx * dvx + dvy * dvy + dvz * dvz;
+
+                  if (dvDotDv < 1e-10) continue; // Negligible relative velocity
+
+                  // Time of closest approach: t_cpa = -dot(dr, dv) / dot(dv, dv)
+                  let tCPA = -dvDotDr / dvDotDv;
+                  tCPA = Math.max(0, Math.min(tCPA, dtSec)); // Clamp to [0, dt]
+
+                  // Distance at CPA
+                  const cpx = dx + dvx * tCPA;
+                  const cpy = dy + dvy * tCPA;
+                  const cpz = dz + dvz * tCPA;
+                  const cpDistSq = cpx * cpx + cpy * cpy + cpz * cpz;
+
+                  if (cpDistSq <= thresholdSq) {
+                    collisions.push([idxA, idxB]);
+                  }
                 }
               }
             }

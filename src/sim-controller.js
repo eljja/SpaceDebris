@@ -218,18 +218,29 @@ export class SimulationController {
     const posVector = this.orbitRenderer.getObjectPosition(index);
     if (!posVector) return;
 
-    // We don't have accurate instantaneous velocity easily from SGP4 without 
-    // re-evaluating it. Let's just create a generic orbital velocity tangent to position.
-    const r = posVector.length();
-    const vMag = Math.sqrt(398600 / r); // roughly circular orbit velocity
-    // Cross product with up vector to get tangent
-    const up = new THREE.Vector3(0, 1, 0);
-    let tangent = new THREE.Vector3().crossVectors(posVector, up).normalize();
-    if (tangent.lengthSq() < 0.1) tangent.set(1, 0, 0); // fallback
-    tangent.multiplyScalar(vMag);
+    // Compute REAL orbital velocity via SGP4 numerical differentiation
+    // This preserves the actual orbital inclination and angular momentum
+    const velVector = this.orbitRenderer.getObjectVelocity(index);
+    
+    let vel;
+    if (velVector && velVector.lengthSq() > 1) {
+      vel = { vx: velVector.x, vy: velVector.y, vz: velVector.z };
+    } else {
+      // Fallback: compute circular orbit velocity preserving position direction
+      const r = posVector.length();
+      const vMag = Math.sqrt(398600.4418 / r); // km/s
+      // Use position cross angular momentum direction for tangent
+      const posNorm = posVector.clone().normalize();
+      // Use a perpendicular axis that is NOT aligned with position
+      const refAxis = Math.abs(posNorm.y) < 0.9
+        ? new THREE.Vector3(0, 1, 0)
+        : new THREE.Vector3(1, 0, 0);
+      const tangent = new THREE.Vector3().crossVectors(posNorm, refAxis).normalize();
+      tangent.multiplyScalar(vMag);
+      vel = { vx: tangent.x, vy: tangent.y, vz: tangent.z };
+    }
 
     const pos = { x: posVector.x, y: posVector.y, z: posVector.z };
-    const vel = { vx: tangent.x, vy: tangent.y, vz: tangent.z };
 
     // Get object metadata if available to estimate parent mass
     let targetMass = 500;
