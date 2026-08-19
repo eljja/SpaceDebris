@@ -357,7 +357,8 @@ class SpaceDebrisApp {
 
     // 4. Step physics simulation (if active)
     if (this.simController && !this.isPaused) {
-      this.simController.update(frameDelta);
+      const simDeltaSec = (frameDelta * 1000 * this.timeSpeed) / 1000;
+      this.simController.update(frameDelta, simDeltaSec);
     }
 
     // 5. Camera Tracking Mode

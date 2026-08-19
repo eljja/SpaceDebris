@@ -39,8 +39,15 @@ export class SimulationController {
   initSimMesh() {
     // Dedicated InstancedMesh for physics simulation debris particles (Max 2,500)
     const geo = new THREE.SphereGeometry(1, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White base for proper instance coloring
     this.simMesh = new THREE.InstancedMesh(geo, mat, 2500);
+    
+    // Pre-initialize instance colors so the shader compiles with instancing support
+    const defaultColor = new THREE.Color(0xff1744);
+    for (let i = 0; i < 2500; i++) {
+      this.simMesh.setColorAt(i, defaultColor);
+    }
+    
     this.simMesh.count = 0;
     this.sceneManager.getScene().add(this.simMesh);
   }
@@ -149,20 +156,22 @@ export class SimulationController {
     });
   }
 
-  update(deltaTimeSec) {
+  update(realDeltaSec, simDeltaSec = realDeltaSec) {
     if (!this.simActive) return;
 
     // 1. Step physics loop with real-time catalog satellite collision check
     const catalogCheckFn = (pos, radius) => this.orbitRenderer ? this.orbitRenderer.findNearbySatellite(pos, radius) : null;
-    const result = this.simulator.step(deltaTimeSec, catalogCheckFn);
+    
+    // Physics engine runs on SIMULATION time
+    const result = this.simulator.step(simDeltaSec, catalogCheckFn);
 
     // Update simulation overlay modal live counters
     if (this.inputPanel?.updateLiveStats) {
       this.inputPanel.updateLiveStats(this.simulator.stats, this.simulator.particles.length);
     }
 
-    // 2. Update VFX
-    this.vfx.update(deltaTimeSec);
+    // 2. Update VFX (runs on REAL time so animations don't instantly finish if time is accelerated)
+    this.vfx.update(realDeltaSec);
 
     // 3. Update Simulation Particles InstancedMesh
     const particles = this.simulator.getParticles();
