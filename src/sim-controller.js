@@ -262,8 +262,10 @@ export class SimulationController {
     // Destroy parent satellite on 3D globe so it vanishes upon explosion
     this.orbitRenderer.destroySatellite(index);
 
-    // Trigger fragmentation with estimated mass
-    const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, 1.5);
+    const rootId = `root_sat_${(obj && obj.NORAD_CAT_ID) ? obj.NORAD_CAT_ID : index}_${Date.now()}`;
+
+    // Trigger fragmentation with estimated mass and clean rootId
+    const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, 1.5, rootId);
     this.vfx.triggerExplosion(pos, 1.5);
     this.sound.playExplosion(1.5);
     this.uiManager.setStatus(`💥 TARGET DESTROYED! (${targetMass}kg) ${createdCount} fragments generated!`);

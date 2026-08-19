@@ -493,13 +493,12 @@ export class OrbitRenderer {
     const thresholdSq = radiusKm * radiusKm;
     const pVec = new THREE.Vector3(position.x, position.y, position.z);
     const pDist = pVec.length();
-    const pAlt = pDist - 6371;
+    const pAlt = pDist - 6378.137;
 
     const targetPos = new THREE.Vector3();
     const mat = new THREE.Matrix4();
     const now = new Date();
 
-    // Check across the valid catalog
     const allObjects = this.dataLoader.getObjects();
     const totalValid = this.validMap.length;
 
@@ -510,23 +509,26 @@ export class OrbitRenderer {
       const obj = allObjects[origIdx];
       if (!obj) continue;
 
-      // Fast altitude filter: skip if object orbit altitude range is far away (>80km)
+      // Fast altitude filter: skip if object orbit altitude range is far away (>60km)
       const apo = obj.apo || 600;
       const peri = obj.peri || 500;
-      if (pAlt < (peri - 80) || pAlt > (apo + 80)) continue;
+      if (pAlt < (peri - 60) || pAlt > (apo + 60)) continue;
 
+      // Check if current position in visible LOD mesh is active and currently rendered
       const mi = this.indexToMesh.get(origIdx);
-      if (mi !== undefined && this.mesh) {
+      if (mi !== undefined && this.visibleSet && this.visibleSet.has(origIdx) && this.mesh) {
         this.mesh.getMatrixAt(mi, mat);
         targetPos.setFromMatrixPosition(mat);
 
         if (targetPos.lengthSq() > 1000) {
           const distSq = targetPos.distanceToSquared(pVec);
           if (distSq <= thresholdSq) {
+            const vel = this.getObjectVelocity(origIdx);
             return {
               ...obj,
               index: origIdx,
-              position: { x: targetPos.x, y: targetPos.y, z: targetPos.z }
+              position: { x: targetPos.x, y: targetPos.y, z: targetPos.z },
+              velocity: vel ? { vx: vel.x, vy: vel.y, vz: vel.z } : null
             };
           }
           continue;
@@ -541,10 +543,12 @@ export class OrbitRenderer {
           targetPos.set(pv.position.x, pv.position.z, -pv.position.y);
           const distSq = targetPos.distanceToSquared(pVec);
           if (distSq <= thresholdSq) {
+            const vel = this.getObjectVelocity(origIdx);
             return {
               ...obj,
               index: origIdx,
-              position: { x: targetPos.x, y: targetPos.y, z: targetPos.z }
+              position: { x: targetPos.x, y: targetPos.y, z: targetPos.z },
+              velocity: vel ? { vx: vel.x, vy: vel.y, vz: vel.z } : null
             };
           }
         }
