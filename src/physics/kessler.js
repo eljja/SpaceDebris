@@ -66,12 +66,20 @@ export class KesslerSimulator {
     }
 
     const assignedSourceId = particle.sourceId || sourceId || `src_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const assignedRootId = particle.rootSourceId || rootSourceId || assignedSourceId;
+    
+    let assignedRootIds = [];
+    if (particle.rootSourceIds) {
+      assignedRootIds = particle.rootSourceIds;
+    } else if (rootSourceId) {
+      assignedRootIds = Array.isArray(rootSourceId) ? rootSourceId : [rootSourceId];
+    } else {
+      assignedRootIds = [assignedSourceId];
+    }
 
     const p = {
       id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       sourceId: assignedSourceId,
-      rootSourceId: assignedRootId, // Permanent root ancestor satellite/explosion ID
+      rootSourceIds: assignedRootIds, // Array of ancestor root IDs to prevent incestuous cascades
       generation: particle.generation !== undefined ? particle.generation : generation,
       position: { ...particle.position },
       velocity: { ...particle.velocity },
@@ -210,11 +218,13 @@ export class KesslerSimulator {
           };
 
           // Generate hypervelocity collision breakup fragments
+          const combinedRoots = Array.from(new Set([...(p.rootSourceIds || []), struckRootId])).slice(0, 5);
           const frags = BreakupModel.collide(p, satObj, 24);
+          
           for (const f of frags) {
             f.immuneTimer = 0.8;
-            // The newly created fragments belong to the struck satellite's root lineage
-            this.addParticle(f, struckRootId, (p.generation || 1) + 1, struckRootId);
+            // The newly created fragments inherit BOTH lineages
+            this.addParticle(f, struckRootId, (p.generation || 1) + 1, combinedRoots);
           }
 
           this.stats.collisions++;
@@ -262,9 +272,17 @@ export class KesslerSimulator {
         if (!pA || !pB) continue;
 
         // CRITICAL RULE: ROOT-SIBLING SKIP
-        // Fragments derived from the SAME original parent satellite (rootSourceId) NEVER collide!
-        // Collisions ONLY occur between fragments from DIFFERENT parent satellites/sources!
-        if (pA.rootSourceId && pB.rootSourceId && pA.rootSourceId === pB.rootSourceId) {
+        // Fragments derived from ANY common original parent satellite NEVER collide!
+        let sharesRoot = false;
+        if (pA.rootSourceIds && pB.rootSourceIds) {
+          for (const rA of pA.rootSourceIds) {
+            if (pB.rootSourceIds.includes(rA)) {
+              sharesRoot = true;
+              break;
+            }
+          }
+        }
+        if (sharesRoot) {
           continue;
         }
 
@@ -282,13 +300,14 @@ export class KesslerSimulator {
         toRemove.add(idxA);
         toRemove.add(idxB);
 
-        const cascadeRootId = `${pA.rootSourceId}+${pB.rootSourceId}`;
+        // Merge root lineages (limit to 5 to prevent unbounded growth)
+        const combinedRoots = Array.from(new Set([...(pA.rootSourceIds || []), ...(pB.rootSourceIds || [])])).slice(0, 5);
         const nextGen = Math.max(genA, genB) + 1;
         const frags = BreakupModel.collide(pA, pB, 18);
 
         for (const f of frags) {
           f.immuneTimer = 0.8;
-          this.addParticle(f, cascadeRootId, nextGen, cascadeRootId);
+          this.addParticle(f, null, nextGen, combinedRoots);
         }
 
         this.stats.collisions++;

@@ -58,6 +58,8 @@ export class SimulationController {
       const countInput = document.getElementById('input-particle-count');
       const count = countInput ? parseInt(countInput.value, 10) || 1 : 1;
       
+      const sharedRootId = `root_user_${Date.now()}`; // Prevent injected siblings from colliding
+      
       for (let i = 0; i < count; i++) {
         // Slight random variation in velocity for multiple particles
         const vvx = particleData.velocity.vx + (Math.random() - 0.5) * 0.5;
@@ -69,7 +71,7 @@ export class SimulationController {
           velocity: { vx: vvx, vy: vvy, vz: vvz },
           mass: particleData.mass || 10,
           category: 'user_injected' // Tag as user-added particle
-        });
+        }, null, 0, sharedRootId);
       }
       
       this.sound.playDebrisLaunch();
