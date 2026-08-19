@@ -37,10 +37,10 @@ export class SimulationController {
   }
 
   initSimMesh() {
-    // Dedicated InstancedMesh for physics simulation debris particles (Max 2,000)
-    const geo = new THREE.SphereGeometry(6, 4, 4); // 6km radius, low-poly
+    // Dedicated InstancedMesh for physics simulation debris particles (Max 2,500)
+    const geo = new THREE.SphereGeometry(1, 6, 6);
     const mat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
-    this.simMesh = new THREE.InstancedMesh(geo, mat, 2000);
+    this.simMesh = new THREE.InstancedMesh(geo, mat, 2500);
     this.simMesh.count = 0;
     this.sceneManager.getScene().add(this.simMesh);
   }
@@ -171,14 +171,14 @@ export class SimulationController {
 
     const dummy = new THREE.Object3D();
     const colorUser = new THREE.Color(0xff1744);    // Vibrant Crimson Red (User-Injected Debris)
-    const colorExplode = new THREE.Color(0xff5252); // Bright Red (Explosion Debris)
-    const colorCascade = new THREE.Color(0xff1744); // Crimson Red (Cascade Debris)
+    const colorExplode = new THREE.Color(0xff3d00); // Bright Orange-Red (Explosion Debris)
+    const colorCascade = new THREE.Color(0xff0055); // Neon Red-Pink (Cascade Debris)
 
     for (let i = 0; i < count; i++) {
       const p = particles[i];
       dummy.position.set(p.position.x, p.position.y, p.position.z);
-      // Scale instance visually according to its physical characteristic size (L_c)
-      const sizeScale = Math.max(3, Math.min(18, (p.size || 0.1) * 12));
+      // High-visibility instance scale (20~30km equivalent) matching catalog satellites
+      const sizeScale = 22;
       dummy.scale.set(sizeScale, sizeScale, sizeScale);
       dummy.updateMatrix();
       this.simMesh.setMatrixAt(i, dummy.matrix);
@@ -242,10 +242,11 @@ export class SimulationController {
 
     const pos = { x: posVector.x, y: posVector.y, z: posVector.z };
 
-    // Get object metadata if available to estimate parent mass
+    // Get object metadata if available to estimate parent mass and NORAD ID
     let targetMass = 500;
+    let obj = null;
     if (window.app && window.app.dataLoader) {
-      const obj = window.app.dataLoader.getObjects()[index];
+      obj = window.app.dataLoader.getObjects()[index];
       if (obj) {
         if (obj.rcsSize === 'LARGE') targetMass = 1800;
         else if (obj.rcsSize === 'MEDIUM') targetMass = 450;
@@ -253,16 +254,16 @@ export class SimulationController {
       }
     }
 
-    // Enable sim mode if not active
+    // Enable simulation mode cleanly
     if (!this.simActive) {
       this.setSimActive(true);
-      document.getElementById('btn-toggle-sim')?.click();
     }
 
     // Destroy parent satellite on 3D globe so it vanishes upon explosion
     this.orbitRenderer.destroySatellite(index);
 
-    const rootId = `root_sat_${(obj && obj.NORAD_CAT_ID) ? obj.NORAD_CAT_ID : index}_${Date.now()}`;
+    const noradId = (obj && obj.NORAD_CAT_ID) ? obj.NORAD_CAT_ID : index;
+    const rootId = `root_sat_${noradId}_${Date.now()}`;
 
     // Trigger fragmentation with estimated mass and clean rootId
     const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, 1.5, rootId);
