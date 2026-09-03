@@ -24,6 +24,7 @@ export class OrbitRenderer {
     this.satrecs = new Array(this.objects.length).fill(null);
     this.visibleSet = new Set();
     this.validMap = [];   // validMap[meshInstance] = originalIndex
+    this.validColors = []; // Cached category colors for each instance
     this.indexToMesh = new Map(); // originalIndex -> meshInstanceIndex
     this.scales = [];
 
@@ -31,6 +32,8 @@ export class OrbitRenderer {
     this.mesh = null;
     this.orbitPath = null;
     this.selectedObjectIndex = -1;
+    this.prevSelectedObjectIndex = -1;
+    this.whiteColor = new THREE.Color(0xffffff);
     this.destroyedCatalogIndices = new Set(); // Registry of destroyed satellites
 
     this._buildSatrecs();
@@ -138,6 +141,7 @@ export class OrbitRenderer {
 
   _buildMesh() {
     const validColors = [];
+    this.validColors = validColors;
     this.validMap = [];
     this.scales = [];
     this.indexToMesh.clear();
@@ -225,7 +229,18 @@ export class OrbitRenderer {
   update(now, camera = null) {
     if (!this.mesh) return;
 
-    const whiteColor = new THREE.Color(0xffffff);
+    // If selected object changed, restore previous object's category color
+    if (this.prevSelectedObjectIndex !== this.selectedObjectIndex) {
+      if (this.prevSelectedObjectIndex !== -1) {
+        const prevMi = this.indexToMesh.get(this.prevSelectedObjectIndex);
+        if (prevMi !== undefined && this.validColors[prevMi]) {
+          this.mesh.setColorAt(prevMi, this.validColors[prevMi]);
+          if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+        }
+      }
+      this.prevSelectedObjectIndex = this.selectedObjectIndex;
+    }
+
     const visibleList = this.visibleIndicesList || this.validMap;
 
     for (let vi = 0; vi < visibleList.length; vi++) {
@@ -255,7 +270,7 @@ export class OrbitRenderer {
         let s = this.scales[mi];
         if (origIdx === this.selectedObjectIndex) {
           s *= 2.5; // Make selected object 2.5x larger and white
-          this.mesh.setColorAt(mi, whiteColor);
+          this.mesh.setColorAt(mi, this.whiteColor);
         }
         
         this.dummy.scale.set(s, s, s);
@@ -460,7 +475,15 @@ export class OrbitRenderer {
   }
 
   clearOrbitPath() {
+    if (this.selectedObjectIndex !== -1) {
+      const mi = this.indexToMesh.get(this.selectedObjectIndex);
+      if (mi !== undefined && this.validColors[mi]) {
+        this.mesh.setColorAt(mi, this.validColors[mi]);
+        if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+      }
+    }
     this.selectedObjectIndex = -1;
+    this.prevSelectedObjectIndex = -1;
     if (this.selectionMarkerGroup) {
       this.selectionMarkerGroup.visible = false;
     }

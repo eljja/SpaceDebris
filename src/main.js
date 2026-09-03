@@ -345,11 +345,12 @@ class SpaceDebrisApp {
     // 1. Advance simulation time
     if (!this.isPaused) {
       const simDeltaMs = frameDelta * 1000 * this.timeSpeed;
+      const simDeltaSec = simDeltaMs / 1000;
       this.simDate = new Date(this.simDate.getTime() + simDeltaMs);
       this.ui.updateTime(this.simDate);
 
-      // 2. Rotate Earth
-      this.earth.update(frameDelta);
+      // 2. Rotate Earth synchronized with simulation speed (keeps GEO satellites stationary)
+      this.earth.update(simDeltaSec);
     }
 
     // 3. Propagate orbits via SGP4 and update 3D target reticle

@@ -114,8 +114,8 @@ export class Earth {
 
     this._earthMesh = new THREE.Mesh(geo, mat);
     
-    // Tilt Earth (axial tilt ~23.5 degrees)
-    this._earthMesh.rotation.z = 23.5 * Math.PI / 180;
+    // In ECI frame, Earth's rotational axis is the polar axis (Three.js Y-axis).
+    // Equatorial plane is X-Z plane, matching satellite orbit coordinate definitions.
 
     this.group.add(this._earthMesh);
   }

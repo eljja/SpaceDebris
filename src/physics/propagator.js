@@ -129,8 +129,15 @@ export class PhysicsPropagator {
       return true; // Reentered / destroyed
     }
 
-    // 3. New Acceleration a_{n+1} at updated position
-    const a1 = this.getAcceleration(pos, vel, am);
+    // 3. Predictor velocity for velocity-dependent dissipative forces (atmospheric drag)
+    const vPred = {
+      vx: vel.vx + a0.ax * dtSec,
+      vy: vel.vy + a0.ay * dtSec,
+      vz: vel.vz + a0.az * dtSec
+    };
+
+    // New Acceleration a_{n+1} at updated position and predicted velocity
+    const a1 = this.getAcceleration(pos, vPred, am);
 
     // 4. Velocity step: v_{n+1} = v_n + ½·(a_n + a_{n+1})·dt
     vel.vx += 0.5 * (a0.ax + a1.ax) * dtSec;

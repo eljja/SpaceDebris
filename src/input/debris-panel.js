@@ -402,15 +402,34 @@ export class DebrisInputPanel {
 
       const r = 6371 + alt;
 
-      // Spherical ECI position
-      const px = r * Math.cos(lat) * Math.cos(lon);
-      const py = r * Math.sin(lat);
-      const pz = r * Math.cos(lat) * Math.sin(lon);
+      // Spherical ECI position (Three.js coords: Y is North, X-Z is equatorial plane)
+      const cosLat = Math.cos(lat);
+      const sinLat = Math.sin(lat);
+      const cosLon = Math.cos(lon);
+      const sinLon = Math.sin(lon);
 
-      // Tangent velocity direction
-      const vx = -speed * Math.sin(lon) * Math.sin(az);
-      const vy = speed * Math.cos(az);
-      const vz = speed * Math.cos(lon) * Math.sin(az);
+      const px = r * cosLat * cosLon;
+      const py = r * sinLat;
+      const pz = r * cosLat * sinLon;
+
+      // Local tangent unit vectors:
+      // uNorth: points along meridian towards North (+Y)
+      // uEast: points along parallel towards East (+lon, in Three.js: -X*sinLon + Z*cosLon)
+      const cosAz = Math.cos(az);
+      const sinAz = Math.sin(az);
+
+      const uNorthX = -sinLat * cosLon;
+      const uNorthY =  cosLat;
+      const uNorthZ = -sinLat * sinLon;
+
+      const uEastX = -sinLon;
+      const uEastY =  0;
+      const uEastZ =  cosLon;
+
+      // Tangent velocity vector = speed * (cos(az) * uNorth + sin(az) * uEast)
+      const vx = speed * (cosAz * uNorthX + sinAz * uEastX);
+      const vy = speed * (cosAz * uNorthY + sinAz * uEastY);
+      const vz = speed * (cosAz * uNorthZ + sinAz * uEastZ);
 
       if (this.onLaunchNumerical) {
         this.onLaunchNumerical({
