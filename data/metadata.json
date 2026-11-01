@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-10-01T04:27:13.546781+00:00",
+  "lastUpdated": "2026-11-01T04:40:29.311307+00:00",
   "nextScheduledUpdate": "2026-11-01",
   "updateFrequency": "quarterly",
   "sources": {
@@ -7,11 +7,11 @@
     "celestrak_satcat": "https://celestrak.org/pub/satcat.csv"
   },
   "objectCounts": {
-    "activeSatellites": 16612,
+    "activeSatellites": 16848,
     "debris": 2676,
-    "satcatTotal": 70830,
-    "satcatPayloads": 27849,
-    "satcatRocketBodies": 6906,
-    "satcatDebris": 35908
+    "satcatTotal": 71228,
+    "satcatPayloads": 28200,
+    "satcatRocketBodies": 6920,
+    "satcatDebris": 35943
   }
 }
