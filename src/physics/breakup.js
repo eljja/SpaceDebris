@@ -1,8 +1,9 @@
 /**
  * SpaceDebris — NASA Standard Breakup Model (Johnson et al., 2001)
- * 
+ *
  * Generates realistic debris clouds from satellite explosions and hypervelocity collisions.
- * Enforces EXACT 3D spherical isotropic dispersion, momentum conservation, and mass conservation.
+ * Enforces EXACT mass conservation, EXACT 3D momentum vector conservation,
+ * and anisotropic cone-biased dispersion for hypervelocity impacts.
  *
  * Size thresholds:
  * ────────────────────────────────────────────────────────────────
@@ -18,22 +19,22 @@ const CATASTROPHIC_THRESHOLD = 40;  // J/g — NASA catastrophic collision energ
 
 export class BreakupModel {
   /**
-   * Generates fragments from an explosion event.
+   * Generates fragments from an explosion or collision event.
    * Fragment count and size distribution depend on parent mass and requested fidelity.
    *
    * @param {Object} parentObj - { mass (kg), position: {x,y,z}, velocity: {vx,vy,vz} }
-   * @param {number} explosionEnergyJ - Explosion energy in Joules
+   * @param {number} explosionEnergyJ - Explosion/collision energy in Joules
    * @param {number} maxFragments - Performance cap (e.g. 50, 120, 180)
-   * @param {string} breakupType - 'explosion' or 'collision' (controls A/m distribution)
-   * @returns {Array<Object>} Generated fragment objects with true 3D isotropic velocity dispersion
+   * @param {string} breakupType - 'explosion' or 'collision' (controls A/m & dispersion)
+   * @param {Object|null} impactAxis - Optional unit vector {x,y,z} along relative impact velocity for anisotropic scatter
+   * @returns {Array<Object>} Generated fragment objects with exact mass & momentum conservation
    */
-  static explode(parentObj, explosionEnergyJ = 1e8, maxFragments = 150, breakupType = 'explosion') {
+  static explode(parentObj, explosionEnergyJ = 1e8, maxFragments = 150, breakupType = 'explosion', impactAxis = null) {
     const parentMass = parentObj.mass || 500;
     const parentPos = { ...parentObj.position };
     const parentVel = { ...parentObj.velocity };
 
     // ── 1. Determine target fragment count ───────────────────────
-    // Scale count by parent mass and cap at maxFragments
     const L_c_min = MIN_SIZE_CHAIN; // 0.05m
     let rawCount = Math.floor(
       6 * Math.pow(parentMass, 0.75) * Math.pow(L_c_min, -1.6) * 0.25
@@ -41,20 +42,19 @@ export class BreakupModel {
     const randomFactor = 0.8 + Math.random() * 0.4; // ±20% variation
     rawCount = Math.floor(rawCount * randomFactor);
 
-    // Target count: respect user scenario requested count (e.g. 120, 180)
     const targetCount = Math.max(10, Math.min(rawCount, maxFragments));
 
     // ── 2. Maximum fragment size based on parent mass ────────────
     const parentVolume = parentMass / ALUMINUM_DENSITY;
     const maxLc = Math.max(
       L_c_min * 2,
-      Math.min(2.5, Math.pow(parentVolume * 6 / Math.PI, 1/3) * 0.9)
+      Math.min(2.5, Math.pow(parentVolume * 6 / Math.PI, 1 / 3) * 0.9)
     );
 
     const fragments = [];
     let totalGeneratedMass = 0;
 
-    // ── 3. Generate 3D Isotropically Dispersed Fragments ────────
+    // ── 3. Generate 3D Dispersed Fragments ───────────────────────
     for (let i = 0; i < targetCount; i++) {
       // Power-law sampling for L_c in [L_c_min, maxLc]
       const u = Math.random();
@@ -71,37 +71,49 @@ export class BreakupModel {
       let logAM;
       if (breakupType === 'collision') {
         if (Math.random() < 0.6) {
-          logAM = -0.45 + this._gaussianRandom() * 0.2;  // Mode 1
+          logAM = -0.45 + this._gaussianRandom() * 0.2;
         } else {
-          logAM = -1.5  + this._gaussianRandom() * 0.5;  // Mode 2
+          logAM = -1.5 + this._gaussianRandom() * 0.5;
         }
       } else {
         if (Math.random() < 0.7) {
-          logAM = -0.6 + this._gaussianRandom() * 0.15;  // Mode 1
+          logAM = -0.6 + this._gaussianRandom() * 0.15;
         } else {
-          logAM = -1.2 + this._gaussianRandom() * 0.3;   // Mode 2
+          logAM = -1.2 + this._gaussianRandom() * 0.3;
         }
       }
       const areaToMass = Math.pow(10, logAM);
       const rawMass = area / areaToMass;
       totalGeneratedMass += rawMass;
 
-      // ── 3D Isotropic Spherical Direction Sampling ────────────
-      // Uniform distribution across the 4π steradian sphere
-      const theta = Math.random() * Math.PI * 2;          // Azimuth [0, 2π)
-      const phi = Math.acos(2 * Math.random() - 1);        // Polar angle [0, π]
+      // Uniform 4π steradian spherical unit direction
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      let ux = Math.sin(phi) * Math.cos(theta);
+      let uy = Math.sin(phi) * Math.sin(theta);
+      let uz = Math.cos(phi);
 
-      // ── Delta-V Magnitude in km/s ────────────────────────────
-      // In real hypervelocity breakups, ejection speed ranges from 50 m/s to 600 m/s (0.05 to 0.6 km/s)
-      // NASA model: log10(dv [km/s]) = -0.7 + 0.25 * log10(A/m) + Gaussian(0, 0.2)
+      // For hypervelocity collisions, bias dispersion into a bipolar momentum cone along impactAxis
+      if (breakupType === 'collision' && impactAxis) {
+        const polarity = (i % 2 === 0) ? 1 : -1;
+        const coneWeight = 0.45;
+        ux = ux * (1 - coneWeight) + impactAxis.x * polarity * coneWeight;
+        uy = uy * (1 - coneWeight) + impactAxis.y * polarity * coneWeight;
+        uz = uz * (1 - coneWeight) + impactAxis.z * polarity * coneWeight;
+        const uLen = Math.sqrt(ux * ux + uy * uy + uz * uz) || 1;
+        ux /= uLen;
+        uy /= uLen;
+        uz /= uLen;
+      }
+
+      // Delta-V Magnitude in km/s (NASA model: 0.04 to 0.85 km/s)
       const energyMultiplier = Math.sqrt(Math.max(0.2, explosionEnergyJ / 1e8));
       const logDV = -0.75 + 0.25 * logAM + this._gaussianRandom() * 0.2;
-      const dvMag = Math.max(0.04, Math.min(0.85, Math.pow(10, logDV) * energyMultiplier)); // km/s
+      const dvMag = Math.max(0.04, Math.min(0.85, Math.pow(10, logDV) * energyMultiplier));
 
-      // 3D delta-V Cartesian components (expanding spherically in all directions)
-      const dvx = dvMag * Math.sin(phi) * Math.cos(theta);
-      const dvy = dvMag * Math.sin(phi) * Math.sin(theta);
-      const dvz = dvMag * Math.cos(phi);
+      const dvx = dvMag * ux;
+      const dvy = dvMag * uy;
+      const dvz = dvMag * uz;
 
       fragments.push({
         position: { ...parentPos },
@@ -139,14 +151,9 @@ export class BreakupModel {
       const pyT = parentMass * parentVel.vy;
       const pzT = parentMass * parentVel.vz;
 
-      const dpx = pxT - pxA;
-      const dpy = pyT - pyA;
-      const dpz = pzT - pzA;
-
-      // Distribute residual delta-momentum uniformly across all fragments
-      const dvCorrX = dpx / parentMass;
-      const dvCorrY = dpy / parentMass;
-      const dvCorrZ = dpz / parentMass;
+      const dvCorrX = (pxT - pxA) / parentMass;
+      const dvCorrY = (pyT - pyA) / parentMass;
+      const dvCorrZ = (pzT - pzA) / parentMass;
 
       for (const f of fragments) {
         f.velocity.vx += dvCorrX;
@@ -160,17 +167,23 @@ export class BreakupModel {
 
   /**
    * Generates fragments from a hypervelocity collision.
-   * Fragment count scales with combined mass and relative velocity.
+   * Conserves total mass and center-of-mass momentum vector.
    */
   static collide(obj1, obj2, maxFragments = 100) {
     const m1 = obj1.mass || 500;
     const m2 = obj2.mass || 100;
 
     // Relative velocity (km/s → m/s)
-    const dvx = (obj1.velocity.vx - obj2.velocity.vx) * 1000;
-    const dvy = (obj1.velocity.vy - obj2.velocity.vy) * 1000;
-    const dvz = (obj1.velocity.vz - obj2.velocity.vz) * 1000;
-    const vRelMs = Math.sqrt(dvx * dvx + dvy * dvy + dvz * dvz);
+    const dvxKm = obj1.velocity.vx - obj2.velocity.vx;
+    const dvyKm = obj1.velocity.vy - obj2.velocity.vy;
+    const dvzKm = obj1.velocity.vz - obj2.velocity.vz;
+    const vRelKm = Math.sqrt(dvxKm * dvxKm + dvyKm * dvyKm + dvzKm * dvzKm);
+    const vRelMs = vRelKm * 1000;
+
+    // Normalized relative impact axis for anisotropic hypervelocity cone scatter
+    const impactAxis = vRelKm > 1e-4
+      ? { x: dvxKm / vRelKm, y: dvyKm / vRelKm, z: dvzKm / vRelKm }
+      : null;
 
     // Kinetic energy
     const projMass = Math.min(m1, m2);
@@ -181,22 +194,20 @@ export class BreakupModel {
     const specificEnergyJg = energyJ / (targetMass * 1000);
     const isCatastrophic = specificEnergyJg > CATASTROPHIC_THRESHOLD;
 
-    let fragmentMass;
-    if (isCatastrophic) {
-      fragmentMass = m1 + m2;
-    } else {
-      fragmentMass = Math.min(m1 + m2, projMass * (vRelMs / 1000));
-    }
+    // Total system mass is conserved across fragments (non-catastrophic impacts yield fewer fragments)
+    const totalM = m1 + m2;
+    const ejectedMassEstimate = isCatastrophic
+      ? totalM
+      : Math.min(totalM, projMass * Math.max(1, vRelKm));
 
     const velocityFactor = Math.max(1, vRelMs / 5000);
     const scaledMax = Math.min(
       maxFragments,
-      Math.floor(maxFragments * velocityFactor * (fragmentMass / 500))
+      Math.floor(maxFragments * velocityFactor * (ejectedMassEstimate / 500))
     );
-    const effectiveMax = Math.max(15, Math.min(scaledMax, maxFragments));
+    const effectiveMax = Math.max(isCatastrophic ? 15 : 10, Math.min(scaledMax, maxFragments));
 
     // Center-of-mass velocity
-    const totalM = m1 + m2;
     const vCom = {
       vx: (m1 * obj1.velocity.vx + m2 * obj2.velocity.vx) / totalM,
       vy: (m1 * obj1.velocity.vy + m2 * obj2.velocity.vy) / totalM,
@@ -204,12 +215,12 @@ export class BreakupModel {
     };
 
     const collisionParent = {
-      mass: fragmentMass,
+      mass: totalM,
       position: { ...obj1.position },
       velocity: vCom
     };
 
-    return this.explode(collisionParent, energyJ, effectiveMax, 'collision');
+    return this.explode(collisionParent, energyJ, effectiveMax, 'collision', impactAxis);
   }
 
   /**

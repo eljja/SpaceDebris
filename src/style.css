@@ -1017,7 +1017,7 @@ html, body {
   color: var(--dim);
   letter-spacing: 0.5px;
 }
-.form-group input[type="number"], .form-group input[type="text"] {
+.form-group input[type="number"], .form-group input[type="text"], #input-particle-count {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
   border-radius: 4px;
@@ -1025,6 +1025,10 @@ html, body {
   color: var(--white);
   font-family: var(--font-mono);
   font-size: 0.8rem;
+  outline: none;
+}
+#input-particle-count:focus {
+  border-color: rgba(0, 229, 255, 0.45);
 }
 
 .form-actions {
@@ -1055,4 +1059,40 @@ html, body {
 .glow-cyan-btn { box-shadow: 0 0 14px rgba(0, 229, 255, 0.4); }
 .glow-red-btn  { box-shadow: 0 0 14px rgba(255, 23, 68, 0.4); }
 .range-val { font-family: var(--font-mono); font-size: 0.75rem; color: var(--amber); margin-top: 4px; }
+
+/* Active Simulation Engine Indicator */
+.btn.sim-active {
+  background: rgba(0, 229, 255, 0.18);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+}
+
+/* Keyboard Shortcuts Legend */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: var(--gray);
+}
+.shortcuts-grid kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-right: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 3px;
+}
+
+@media (max-width: 768px) {
+  .telemetry-hud {
+    left: 10px;
+    bottom: calc(var(--footer-h) + 10px);
+    width: 185px;
+  }
+}
 

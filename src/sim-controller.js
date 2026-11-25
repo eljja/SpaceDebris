@@ -32,22 +32,30 @@ export class SimulationController {
     this.simMesh = null; // InstancedMesh for simulation particles
     this.simActive = false;
 
+    // Pre-allocated scratch objects to eliminate per-frame GC spikes
+    this._dummy = new THREE.Object3D();
+    this._colorUser = new THREE.Color(0xff1744);    // Vibrant Crimson Red (User-Injected Debris)
+    this._colorExplode = new THREE.Color(0xff3d00); // Bright Orange-Red (Explosion Debris)
+    this._colorCascade = new THREE.Color(0xff0055); // Neon Red-Pink (Cascade Debris)
+    this._lastStatsUiMs = 0;
+
     this.initSimMesh();
     this.bindEvents();
   }
 
   initSimMesh() {
-    // Dedicated InstancedMesh for physics simulation debris particles (Max 2,500)
     const geo = new THREE.SphereGeometry(1, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White base for proper instance coloring
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     this.simMesh = new THREE.InstancedMesh(geo, mat, 2500);
-    
-    // Pre-initialize instance colors so the shader compiles with instancing support
-    const defaultColor = new THREE.Color(0xff1744);
+    this.simMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
     for (let i = 0; i < 2500; i++) {
-      this.simMesh.setColorAt(i, defaultColor);
+      this.simMesh.setColorAt(i, this._colorUser);
     }
-    
+    if (this.simMesh.instanceColor) {
+      this.simMesh.instanceColor.needsUpdate = true;
+    }
+
     this.simMesh.count = 0;
     this.sceneManager.getScene().add(this.simMesh);
   }
@@ -55,54 +63,70 @@ export class SimulationController {
   bindEvents() {
     // 1. Placer Drag Launch Callback
     this.placer.onLaunch = (particleData) => {
+      if (!this.simActive) this.simActive = true;
+
       const countInput = document.getElementById('input-particle-count');
-      const count = countInput ? parseInt(countInput.value, 10) || 1 : 1;
-      
+      const count = countInput ? Math.max(1, Math.min(1000, parseInt(countInput.value, 10) || 1)) : 1;
+
       const sharedRootId = `root_user_${Date.now()}`; // Prevent injected siblings from colliding
-      
+
       for (let i = 0; i < count; i++) {
-        // Slight random variation in velocity for multiple particles
-        const vvx = particleData.velocity.vx + (Math.random() - 0.5) * 0.5;
-        const vvy = particleData.velocity.vy + (Math.random() - 0.5) * 0.5;
-        const vvz = particleData.velocity.vz + (Math.random() - 0.5) * 0.5;
-        
+        const spread = count > 1 ? 0.5 : 0;
+        const vvx = particleData.velocity.vx + (Math.random() - 0.5) * spread;
+        const vvy = particleData.velocity.vy + (Math.random() - 0.5) * spread;
+        const vvz = particleData.velocity.vz + (Math.random() - 0.5) * spread;
+
         this.simulator.addParticle({
           position: { ...particleData.position },
           velocity: { vx: vvx, vy: vvy, vz: vvz },
           mass: particleData.mass || 10,
-          category: 'user_injected' // Tag as user-added particle
-        }, null, 0, sharedRootId);
+          category: 'user_injected'
+        }, sharedRootId, 1, sharedRootId);
       }
-      
+
       this.sound.playDebrisLaunch();
       this.uiManager.setStatus(`🚀 Launched ${count} user-injected debris particles (Red)!`);
     };
 
+    this.placer.onCancel = () => {
+      this.uiManager.setStatus(this.simActive ? 'Simulation Engine ACTIVE' : 'Tracking Live Orbits', true);
+    };
+
     // 2. Numerical Launch Callback
     this.inputPanel.onLaunchNumerical = (particleData) => {
+      if (!this.simActive) this.simActive = true;
+      const rootId = `root_num_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
       this.simulator.addParticle({
         ...particleData,
         category: 'user_injected'
-      });
+      }, rootId, 1, rootId);
       this.sound.playDebrisLaunch();
-      this.uiManager.setStatus(`🚀 Launched numerical particle (Red)`);
+      this.uiManager.setStatus(`🚀 Launched numerical particle (${particleData.mass}kg)`);
     };
 
-    // 3. Explosion Trigger Callback
+    // 3. Manual Explosion Trigger Callback (fixed argument order & real orbital velocity!)
     this.inputPanel.onExplodeTarget = (energyJ) => {
       const selectedIdx = window.app ? window.app.selectedIndex : -1;
-      let pos = { x: 0, y: 7000, z: 0 };
-      let vel = { vx: 0, vy: 7.5, vz: 0 };
+      const energyScale = Math.max(0.1, energyJ / 1e8);
 
       if (selectedIdx !== -1 && this.orbitRenderer) {
-        const p = this.orbitRenderer.getObjectPosition(selectedIdx);
-        if (p) pos = { x: p.x, y: p.y, z: p.z };
+        const countInput = document.getElementById('input-particle-count');
+        const fragmentCount = countInput ? Math.max(15, Math.min(200, parseInt(countInput.value, 10) || 60)) : 60;
+        this.explodeObject(selectedIdx, fragmentCount, energyScale);
+        if (window.app) window.app._selectObject(-1);
+        this.inputPanel.hide();
+        return;
       }
 
-      const energyScale = energyJ / 1e8;
-      this.simulator.triggerExplosion(pos, vel, 500, energyScale);
-      this.vfx.triggerExplosion(pos, energyScale);
-      this.sound.playExplosion(energyScale);
+      // Fallback if no object selected: explode synthetic LEO target at 7000km
+      if (!this.simActive) this.simActive = true;
+      const pos = { x: 7000, y: 0, z: 0 };
+      const vel = { vx: 0, vy: 7.55, vz: 0 };
+      const created = this.simulator.triggerExplosion(pos, vel, 500, 60, energyScale);
+      this.vfx.triggerExplosion(pos, Math.min(2.5, Math.sqrt(energyScale)));
+      this.sound.playExplosion(Math.min(2.0, Math.sqrt(energyScale)));
+      this.inputPanel.hide();
+      this.uiManager.setStatus(`💥 Synthetic LEO explosion triggered! (+${created} fragments)`);
     };
 
     // 4. Scenario Execution Callback
@@ -110,33 +134,40 @@ export class SimulationController {
       const { norad, frags, mass } = scenarioData;
       if (!window.app || !window.app.dataLoader) return;
 
-      const objects = window.app.dataLoader.getObjects();
-      const targetIdx = objects.findIndex(o => String(o.NORAD_CAT_ID) === String(norad));
+      // Ensure simulation time speed is fast enough to visually observe orbital breakup immediately
+      if (window.app.timeSpeed < 60 && typeof window.app.setTimeSpeed === 'function') {
+        window.app.setTimeSpeed(60);
+      }
+
+      const targetIdx = window.app.dataLoader.getIndexByNoradId(norad);
 
       if (targetIdx !== -1) {
-        // Select & Zoom to target
         window.app._selectObject(targetIdx);
         window.app._zoomToObject(targetIdx);
 
-        // Explode target with realistic fragment count
         setTimeout(() => {
-          this.explodeObject(targetIdx, frags);
+          this.explodeObject(targetIdx, frags, 1.5, mass);
           this.inputPanel.hide();
-        }, 400);
+        }, 350);
       } else {
         // Fallback if specific object is decayed/unindexed
-        if (!this.simActive) this.setSimActive(true);
+        if (!this.simActive) this.simActive = true;
         const pos = { x: 0, y: 7150, z: 0 };
-        const vel = { vx: 0, vy: 7.5, vz: 0 };
+        const vel = { vx: 7.45, vy: 0, vz: 0 };
         const createdCount = this.simulator.triggerExplosion(pos, vel, mass, frags, 1.5);
         this.vfx.triggerExplosion(pos, 1.5);
         this.sound.playExplosion(1.5);
         this.inputPanel.hide();
-        this.uiManager.setStatus(`💥 SCENARIO TRIGGERED! ${createdCount} fragments generated!`);
+        this.uiManager.setStatus(`💥 SCENARIO TRIGGERED! ${createdCount} fragments generated (60x speed)!`);
       }
     };
 
-    // 5. Listen to Physics Simulator Events
+    // 5. Reset Simulation Callback
+    this.inputPanel.onResetSimulation = () => {
+      this.resetSimulation();
+    };
+
+    // 6. Listen to Physics Simulator Events
     this.simulator.on('reentry', (data) => {
       this.vfx.triggerReentry(data.position, data.velocity);
       this.sound.playReentryBurn();
@@ -158,43 +189,72 @@ export class SimulationController {
     });
   }
 
-  update(realDeltaSec, simDeltaSec = realDeltaSec) {
+  /**
+   * Resets all simulation particles, cascade stats, VFX, and restores destroyed catalog satellites
+   */
+  resetSimulation() {
+    this.simulator.reset();
+    this.vfx.clear();
+    if (this.orbitRenderer?.restoreAllSatellites) {
+      this.orbitRenderer.restoreAllSatellites();
+    }
+    this.simMesh.count = 0;
+    this.simMesh.instanceMatrix.needsUpdate = true;
+
+    if (this.inputPanel?.updateLiveStats) {
+      this.inputPanel.updateLiveStats(this.simulator.stats, 0);
+    }
+    this.uiManager.setStatus('🔄 Simulation reset — all debris cleared & catalog restored.', true);
+  }
+
+  update(realDeltaSec, simDeltaSec = realDeltaSec, simDate = null) {
     if (!this.simActive) return;
 
-    // 1. Step physics loop with real-time catalog satellite collision check
-    const catalogCheckFn = (pos, radius) => this.orbitRenderer ? this.orbitRenderer.findNearbySatellite(pos, radius) : null;
-    
-    // Physics engine runs on SIMULATION time
-    const result = this.simulator.step(simDeltaSec, catalogCheckFn);
+    const particles = this.simulator.getParticles();
 
-    // Update simulation overlay modal live counters
-    if (this.inputPanel?.updateLiveStats) {
-      this.inputPanel.updateLiveStats(this.simulator.stats, this.simulator.particles.length);
+    // 1. Prepare O(1) spatial index for catalog satellites in active particle altitude bands
+    if (this.orbitRenderer && particles.length > 0) {
+      this.orbitRenderer.prepareSimulationFrame(simDate || this.orbitRenderer.currentSimDate, particles);
     }
 
-    // 2. Update VFX (runs on REAL time so animations don't instantly finish if time is accelerated)
+    const catalogCheckFn = (pos, radius) => this.orbitRenderer
+      ? this.orbitRenderer.findNearbySatellite(pos, radius, simDate || this.orbitRenderer.currentSimDate)
+      : null;
+
+    // Physics engine runs on SIMULATION time
+    this.simulator.step(simDeltaSec, catalogCheckFn);
+
+    // Throttle overlay live stats DOM update to ~10Hz
+    const nowMs = performance.now();
+    if (nowMs - this._lastStatsUiMs > 100) {
+      this._lastStatsUiMs = nowMs;
+      if (this.inputPanel?.updateLiveStats) {
+        this.inputPanel.updateLiveStats(this.simulator.stats, this.simulator.particles.length);
+      }
+    }
+
+    // 2. Update VFX (runs on REAL time so animations stay crisp at high time warps)
     this.vfx.update(realDeltaSec);
 
-    // 3. Update Simulation Particles InstancedMesh
-    const particles = this.simulator.getParticles();
-    const count = particles.length;
+    // 3. Update Simulation Particles InstancedMesh (zero per-frame allocations)
+    const activeParticles = this.simulator.getParticles();
+    const count = activeParticles.length;
     this.simMesh.count = count;
 
-    const dummy = new THREE.Object3D();
-    const colorUser = new THREE.Color(0xff1744);    // Vibrant Crimson Red (User-Injected Debris)
-    const colorExplode = new THREE.Color(0xff3d00); // Bright Orange-Red (Explosion Debris)
-    const colorCascade = new THREE.Color(0xff0055); // Neon Red-Pink (Cascade Debris)
+    if (count === 0) return;
+
+    const dummy = this._dummy;
+    const colorUser = this._colorUser;
+    const colorExplode = this._colorExplode;
+    const colorCascade = this._colorCascade;
 
     for (let i = 0; i < count; i++) {
-      const p = particles[i];
+      const p = activeParticles[i];
       dummy.position.set(p.position.x, p.position.y, p.position.z);
-      // High-visibility instance scale (20~30km equivalent) matching catalog satellites
-      const sizeScale = 22;
-      dummy.scale.set(sizeScale, sizeScale, sizeScale);
+      dummy.scale.set(22, 22, 22);
       dummy.updateMatrix();
       this.simMesh.setMatrixAt(i, dummy.matrix);
 
-      // Color instance per particle origin category
       if (p.category === 'user_injected') {
         this.simMesh.setColorAt(i, colorUser);
       } else if (p.category === 'sim_tracked') {
@@ -209,6 +269,9 @@ export class SimulationController {
 
   setSimActive(active) {
     this.simActive = active;
+    const simBtn = document.getElementById('btn-toggle-sim');
+    if (simBtn) simBtn.classList.toggle('sim-active', active);
+
     if (active) {
       this.inputPanel.show();
     } else {
@@ -218,31 +281,30 @@ export class SimulationController {
   }
 
   toggleSimMode() {
-    this.setSimActive(!this.simActive);
+    if (this.simActive && this.inputPanel.isVisible()) {
+      this.inputPanel.hide();
+      return this.simActive;
+    }
+    this.setSimActive(true);
     return this.simActive;
   }
 
-  explodeObject(index, fragmentCount = 50) {
+  explodeObject(index, fragmentCount = 50, energyScale = 1.5, overrideMass = null) {
     if (!this.orbitRenderer) return;
-    
-    // Get position of the satellite from SGP4
-    const posVector = this.orbitRenderer.getObjectPosition(index);
+
+    const simDate = this.orbitRenderer.currentSimDate;
+    const posVector = this.orbitRenderer.getObjectPosition(index, simDate);
     if (!posVector) return;
 
-    // Compute REAL orbital velocity via SGP4 numerical differentiation
-    // This preserves the actual orbital inclination and angular momentum
-    const velVector = this.orbitRenderer.getObjectVelocity(index);
-    
+    const velVector = this.orbitRenderer.getObjectVelocity(index, simDate);
+
     let vel;
     if (velVector && velVector.lengthSq() > 1) {
       vel = { vx: velVector.x, vy: velVector.y, vz: velVector.z };
     } else {
-      // Fallback: compute circular orbit velocity preserving position direction
       const r = posVector.length();
-      const vMag = Math.sqrt(398600.4418 / r); // km/s
-      // Use position cross angular momentum direction for tangent
+      const vMag = Math.sqrt(398600.4418 / r);
       const posNorm = posVector.clone().normalize();
-      // Use a perpendicular axis that is NOT aligned with position
       const refAxis = Math.abs(posNorm.y) < 0.9
         ? new THREE.Vector3(0, 1, 0)
         : new THREE.Vector3(1, 0, 0);
@@ -253,21 +315,20 @@ export class SimulationController {
 
     const pos = { x: posVector.x, y: posVector.y, z: posVector.z };
 
-    // Get object metadata if available to estimate parent mass and NORAD ID
-    let targetMass = 500;
+    let targetMass = overrideMass || 500;
     let obj = null;
     if (window.app && window.app.dataLoader) {
       obj = window.app.dataLoader.getObjects()[index];
-      if (obj) {
+      if (!overrideMass && obj) {
         if (obj.rcsSize === 'LARGE') targetMass = 1800;
         else if (obj.rcsSize === 'MEDIUM') targetMass = 450;
         else if (obj.rcsSize === 'SMALL') targetMass = 80;
       }
     }
 
-    // Enable simulation mode cleanly
     if (!this.simActive) {
-      this.setSimActive(true);
+      this.simActive = true;
+      document.getElementById('btn-toggle-sim')?.classList.add('sim-active');
     }
 
     // Destroy parent satellite on 3D globe so it vanishes upon explosion
@@ -276,10 +337,9 @@ export class SimulationController {
     const noradId = (obj && obj.NORAD_CAT_ID) ? obj.NORAD_CAT_ID : index;
     const rootId = `root_sat_${noradId}_${Date.now()}`;
 
-    // Trigger fragmentation with estimated mass and clean rootId
-    const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, 1.5, rootId);
-    this.vfx.triggerExplosion(pos, 1.5);
-    this.sound.playExplosion(1.5);
-    this.uiManager.setStatus(`💥 TARGET DESTROYED! (${targetMass}kg) ${createdCount} fragments generated!`);
+    const createdCount = this.simulator.triggerExplosion(pos, vel, targetMass, fragmentCount, energyScale, rootId);
+    this.vfx.triggerExplosion(pos, Math.min(2.5, energyScale));
+    this.sound.playExplosion(Math.min(2.0, energyScale));
+    this.uiManager.setStatus(`💥 TARGET DESTROYED! (${targetMass.toLocaleString()}kg) ${createdCount} fragments generated!`);
   }
 }

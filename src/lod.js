@@ -41,7 +41,8 @@ export class LODController {
 
   setFilter(filterType, values) {
     if (filterType in this.activeFilters) {
-      this.activeFilters[filterType] = values && values.length > 0 ? values : null;
+      // Preserve empty array [] so unchecking all checkboxes shows 0 objects (null = unfiltered)
+      this.activeFilters[filterType] = Array.isArray(values) ? values : null;
       this._recalculate();
     }
   }

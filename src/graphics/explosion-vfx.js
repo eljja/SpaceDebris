@@ -102,17 +102,21 @@ export class VisualEffectsManager {
    * Triggers an atmospheric reentry burn streak
    */
   triggerReentry(position, velocity) {
+    const vx = velocity?.vx ?? velocity?.x ?? 0;
+    const vy = velocity?.vy ?? velocity?.y ?? 0;
+    const vz = velocity?.vz ?? velocity?.z ?? 0;
+
     const geo = new THREE.BufferGeometry();
     const posArr = new Float32Array([
       position.x, position.y, position.z,
-      position.x - velocity.x * 5, position.y - velocity.y * 5, position.z - velocity.z * 5
+      position.x - vx * 5, position.y - vy * 5, position.z - vz * 5
     ]);
     geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
 
     const mat = new THREE.LineBasicMaterial({
       color: 0xff3d00,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.75,
       blending: THREE.AdditiveBlending,
       linewidth: 2
     });
@@ -121,6 +125,28 @@ export class VisualEffectsManager {
     this.scene.add(line);
 
     this.reentries.push({ line, age: 0, maxAge: 1.5 });
+  }
+
+  /**
+   * Immediately clears all active VFX meshes from the scene
+   */
+  clear() {
+    for (const exp of this.explosions) {
+      this.scene.remove(exp.pSystem);
+      this.scene.remove(exp.ringMesh);
+      exp.pSystem.geometry.dispose();
+      exp.pSystem.material.dispose();
+      exp.ringMesh.geometry.dispose();
+      exp.ringMesh.material.dispose();
+    }
+    this.explosions = [];
+
+    for (const re of this.reentries) {
+      this.scene.remove(re.line);
+      re.line.geometry.dispose();
+      re.line.material.dispose();
+    }
+    this.reentries = [];
   }
 
   update(deltaTimeSec) {

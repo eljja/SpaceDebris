@@ -128,8 +128,14 @@
       </div>
 
       <div class="header-actions">
-        <button class="btn btn-outline glow-cyan" id="btn-toggle-sim" title="Simulation & Physics Engine">
+        <button class="btn btn-outline glow-cyan" id="btn-toggle-sim" title="Simulation & Physics Engine (S)">
           <i data-lucide="zap"></i> Sim Engine
+        </button>
+        <button class="btn btn-icon" id="btn-reset-sim" title="Reset Simulation & Restore Catalog">
+          <i data-lucide="rotate-ccw"></i>
+        </button>
+        <button class="btn btn-icon" id="btn-reset-cam" title="Reset Camera View (R)">
+          <i data-lucide="compass"></i>
         </button>
         <button class="btn btn-icon" id="btn-toggle-sound" title="Toggle Audio">
           <i data-lucide="volume-2" id="icon-sound"></i>
@@ -227,13 +233,16 @@
 
       <!-- Time Controls -->
       <div class="control-group">
-        <div class="time-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="time-header-row" style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px;">
           <label class="control-label" for="speed-slider" style="margin-bottom:0;">
             Time: <span id="speed-label">1x Real-time</span>
           </label>
-          <button class="btn btn-sm btn-outline" id="btn-play-pause" title="Play / Pause Time">
-            <i data-lucide="pause" id="icon-play-pause"></i> Pause
-          </button>
+          <div style="display:flex; gap:4px;">
+            <button class="btn btn-sm btn-outline" id="btn-time-now" title="Reset to Live UTC Time">Now</button>
+            <button class="btn btn-sm btn-outline" id="btn-play-pause" title="Play / Pause Time (Space)">
+              <i data-lucide="pause" id="icon-play-pause"></i> Pause
+            </button>
+          </div>
         </div>
         <input type="range" id="speed-slider" min="0" max="6" value="0" step="1" class="range-slider" />
         <div class="speed-ticks">
@@ -247,9 +256,14 @@
         <div class="control-group">
           <label class="control-label">Injection Particles</label>
           <input type="number" id="input-particle-count" value="50" min="1" max="1000" class="search-box" style="width:100%; padding: 8px;" />
-          <button class="btn btn-outline glow-amber" id="btn-enable-drag" style="width:100%; margin-top:10px;">
-            <i data-lucide="crosshair"></i> Drag to Inject Debris
-          </button>
+          <div style="display:flex; gap:6px; margin-top:10px;">
+            <button class="btn btn-outline glow-amber" id="btn-enable-drag" style="flex:1;">
+              <i data-lucide="crosshair"></i> Drag Inject
+            </button>
+            <button class="btn btn-outline" id="btn-reset-sim-panel" title="Clear fragments & restore destroyed satellites">
+              <i data-lucide="rotate-ccw"></i> Reset
+            </button>
+          </div>
         </div>
       </div>
 
@@ -273,6 +287,18 @@
             <span class="info-key">License</span>
             <span class="info-val tag-nc">CC BY-NC 4.0</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Keyboard Shortcuts -->
+      <div class="panel-section shortcuts-info">
+        <h3>Shortcuts</h3>
+        <div class="shortcuts-grid">
+          <span><kbd>Space</kbd> Play/Pause</span>
+          <span><kbd>S</kbd> Sim Engine</span>
+          <span><kbd>R</kbd> Reset View</span>
+          <span><kbd>Esc</kbd> Clear/Close</span>
+          <span><kbd>←</kbd><kbd>→</kbd> Prev/Next</span>
         </div>
       </div>
     </aside>
@@ -418,6 +444,14 @@
         <div class="hud-stat-row">
           <span class="hud-label">Cascades:</span>
           <span class="hud-val" id="hud-cascade-count" style="color: #ff5252;">0</span>
+        </div>
+        <div class="hud-stat-row">
+          <span class="hud-label">Sim Debris:</span>
+          <span class="hud-val" id="hud-sim-frags" style="color: #ff9100;">0</span>
+        </div>
+        <div class="hud-stat-row">
+          <span class="hud-label">Destroyed:</span>
+          <span class="hud-val" id="hud-destroyed-sats" style="color: #ff1744;">0</span>
         </div>
       </div>
     </div>

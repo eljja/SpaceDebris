@@ -105,7 +105,14 @@ def fetch_satcat():
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(satcat, f, separators=(",", ":"))
 
+        # Also export compact in-orbit-only catalog (~65% smaller for fast browser loading)
+        satcat_orbit = {k: v for k, v in satcat.items() if not v.get("decayDate")}
+        orbit_path = os.path.join(DATA_DIR, "satcat-orbit.json")
+        with open(orbit_path, "w", encoding="utf-8") as f:
+            json.dump(satcat_orbit, f, separators=(",", ":"))
+
         print(f"  -> {len(satcat)} objects -> satcat.json ({os.path.getsize(output_path) / 1024:.1f} KB)")
+        print(f"  -> {len(satcat_orbit)} in-orbit objects -> satcat-orbit.json ({os.path.getsize(orbit_path) / 1024:.1f} KB)")
         return satcat
 
     except Exception as e:

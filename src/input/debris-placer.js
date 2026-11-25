@@ -27,6 +27,7 @@ export class DebrisPlacer {
     this.orbitPreviewLine = null;
 
     this.onLaunch = null; // Callback: (particleData) => {}
+    this.onCancel = null; // Callback when cancelled via Escape or completion
 
     this.initHelpers();
     this.bindEvents();
@@ -57,9 +58,9 @@ export class DebrisPlacer {
     this.arrowHelper.visible = false;
     this.scene.add(this.arrowHelper);
 
-    // 3. Orbit Trajectory Preview Line
+    // 3. Orbit Trajectory Preview Line (THREE.Line avoids straight chord slicing Earth)
     const previewGeo = new THREE.BufferGeometry();
-    const points = new Float32Array(100 * 3);
+    const points = new Float32Array(128 * 3);
     previewGeo.setAttribute('position', new THREE.BufferAttribute(points, 3));
 
     const previewMat = new THREE.LineDashedMaterial({
@@ -68,10 +69,10 @@ export class DebrisPlacer {
       gapSize: 50,
       linewidth: 2,
       transparent: true,
-      opacity: 0.7
+      opacity: 0.75
     });
 
-    this.orbitPreviewLine = new THREE.LineLoop(previewGeo, previewMat);
+    this.orbitPreviewLine = new THREE.Line(previewGeo, previewMat);
     this.orbitPreviewLine.visible = false;
     this.scene.add(this.orbitPreviewLine);
   }
@@ -195,26 +196,40 @@ export class DebrisPlacer {
     this.arrowHelper.position.copy(this.startPos);
     this.arrowHelper.visible = true;
 
-    // Orbit Preview Line (100 Keplerian points)
-    const points = [];
-    let r = this.startPos.clone();
-    let v = this.velocityVec.clone();
-    const dt = 100; // 100s time step for preview loop
-
-    for (let i = 0; i < 100; i++) {
-      points.push(r.x, r.y, r.z);
-
-      // Keplerian step
-      const rMag = r.length();
-      const a = r.clone().multiplyScalar(-398600.4418 / (rMag * rMag * rMag));
-      v.addScaledVector(a, dt);
-      r.addScaledVector(v, dt);
+    // Orbit Preview Line (128 Velocity-Verlet points scaled to actual Keplerian orbital period)
+    const mu = 398600.4418;
+    const r0 = this.startPos.length();
+    const specificEnergy = (vMag * vMag) / 2 - mu / r0;
+    let estPeriod = 5600;
+    if (specificEnergy < -1e-4) {
+      const a = -mu / (2 * specificEnergy);
+      estPeriod = Math.min(86400, Math.max(3000, 2 * Math.PI * Math.sqrt((a * a * a) / mu)));
     }
 
+    const segments = 128;
+    const dt = estPeriod / (segments - 1);
+    const r = this.startPos.clone();
+    const v = this.velocityVec.clone();
+    const a0 = new THREE.Vector3();
+    const a1 = new THREE.Vector3();
     const posAttr = this.orbitPreviewLine.geometry.attributes.position;
-    for (let i = 0; i < 100; i++) {
-      posAttr.setXYZ(i, points[i * 3], points[i * 3 + 1], points[i * 3 + 2]);
+
+    for (let i = 0; i < segments; i++) {
+      posAttr.setXYZ(i, r.x, r.y, r.z);
+
+      const rMag = r.length();
+      if (rMag < 6371) {
+        // Clamp remaining preview points at impact point instead of flying through Earth
+        for (let j = i + 1; j < segments; j++) posAttr.setXYZ(j, r.x, r.y, r.z);
+        break;
+      }
+      a0.copy(r).multiplyScalar(-mu / (rMag * rMag * rMag));
+      r.addScaledVector(v, dt).addScaledVector(a0, 0.5 * dt * dt);
+      const rMag1 = r.length();
+      a1.copy(r).multiplyScalar(-mu / (rMag1 * rMag1 * rMag1));
+      v.addScaledVector(a0, 0.5 * dt).addScaledVector(a1, 0.5 * dt);
     }
+
     posAttr.needsUpdate = true;
     this.orbitPreviewLine.computeLineDistances();
     this.orbitPreviewLine.visible = true;

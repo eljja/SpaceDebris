@@ -237,6 +237,16 @@ export class Earth {
   }
 
   /**
+   * Aligns Earth rotation directly to Greenwich Mean Sidereal Time (GMST in radians).
+   * Eliminates cumulative floating-point drift and aligns geographic continents with SGP4 ECI coordinates.
+   */
+  setGMST(gmstRad) {
+    if (Number.isFinite(gmstRad)) {
+      this.group.rotation.y = gmstRad;
+    }
+  }
+
+  /**
    * Returns the root group. Add this to the scene via scene.add(earth.getMesh()).
    * Contains earth sphere, grid, atmosphere, and lights.
    */

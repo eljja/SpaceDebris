@@ -58,8 +58,9 @@ export class PostProcessingManager {
   }
 
   onResize() {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const dom = this.renderer.domElement.parentElement;
+    const width = (dom && dom.clientWidth) || window.innerWidth;
+    const height = (dom && dom.clientHeight) || window.innerHeight;
     this.composer.setSize(width, height);
     this.bloomPass.resolution.set(width, height);
   }

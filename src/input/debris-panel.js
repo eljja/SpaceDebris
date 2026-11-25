@@ -11,6 +11,7 @@ export class DebrisInputPanel {
     this.onLaunchNumerical = null;
     this.onExplodeTarget = null;
     this.onExecuteScenario = null;
+    this.onResetSimulation = null;
 
     this.scenarios = [
       {
@@ -234,11 +235,16 @@ export class DebrisInputPanel {
     panel.innerHTML = `
       <div class="sim-panel-header">
         <span class="sim-panel-title"><i data-lucide="zap"></i> KESSLER SIMULATION ENGINE</span>
-        <div class="sim-panel-header-right" style="display:flex; align-items:center; gap:10px;">
-          <div class="sim-live-badge" style="background:rgba(255,23,68,0.15); border:1px solid rgba(255,23,68,0.35); padding:2px 8px; border-radius:4px; font-size:0.7rem; font-family:var(--font-mono); color:var(--white);">
+        <div class="sim-panel-header-right" style="display:flex; align-items:center; gap:8px;">
+          <div class="sim-live-badge" style="background:rgba(255,145,0,0.14); border:1px solid rgba(255,145,0,0.35); padding:2px 8px; border-radius:4px; font-size:0.68rem; font-family:var(--font-mono); color:var(--white);">
+            <span>Debris: </span>
+            <strong id="sim-hud-fragments" style="color:#ff9100; font-weight:700;">0</strong>
+          </div>
+          <div class="sim-live-badge" style="background:rgba(255,23,68,0.15); border:1px solid rgba(255,23,68,0.35); padding:2px 8px; border-radius:4px; font-size:0.68rem; font-family:var(--font-mono); color:var(--white);">
             <span>💥 Cascades: </span>
             <strong id="sim-hud-collisions" style="color:#ff5252; font-weight:700;">0</strong>
           </div>
+          <button id="btn-reset-sim-modal" class="btn btn-sm btn-outline" title="Reset Simulation & Restore Catalog" style="padding:2px 7px; font-size:0.68rem;">Reset</button>
           <button id="btn-close-sim" class="btn-close">&times;</button>
         </div>
       </div>
@@ -332,6 +338,11 @@ export class DebrisInputPanel {
     // Close button
     document.getElementById('btn-close-sim')?.addEventListener('click', () => {
       this.hide();
+    });
+
+    // Reset simulation button in modal
+    document.getElementById('btn-reset-sim-modal')?.addEventListener('click', () => {
+      if (this.onResetSimulation) this.onResetSimulation();
     });
 
     // Tab switching
@@ -469,11 +480,19 @@ export class DebrisInputPanel {
     });
   }
 
-  updateLiveStats(stats, activeCount) {
+  updateLiveStats(stats, activeCount = 0) {
     const elCol = document.getElementById('sim-hud-collisions');
     if (elCol && stats) {
       elCol.textContent = (stats.collisions || 0).toLocaleString();
     }
+    const elFrags = document.getElementById('sim-hud-fragments');
+    if (elFrags) {
+      elFrags.textContent = (activeCount || 0).toLocaleString();
+    }
+  }
+
+  isVisible() {
+    return Boolean(this.modalEl && !this.modalEl.classList.contains('hidden'));
   }
 
   show() {

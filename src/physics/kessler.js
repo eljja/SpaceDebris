@@ -1,7 +1,13 @@
 /**
  * SpaceDebris — Kessler Syndrome Simulation Controller
  * Manages active physics particles, steps their orbits, detects collisions,
- * and triggers cascade breakup events with smart root-lineage filtering and catalog-priority detection.
+ * and triggers cascade breakup events with:
+ *   - Multi-generation root-lineage deduplication (zero incestuous self-collisions)
+ *   - Proximity-based hybrid real-time + sim-time cooldown (zero grid-boundary leaks)
+ *   - Per-frame collision budget enforced across ALL substeps
+ *   - Minimum relative-velocity gate (no co-orbital grazing false explosions)
+ *   - Deferred spawn queue (zero array-shift index corruption at maxParticles cap)
+ *   - Destroyed catalog satellite deduplication (a catalog satellite can never be hit twice)
  */
 
 import { PhysicsPropagator } from './propagator.js';
@@ -17,15 +23,22 @@ export class KesslerSimulator {
       reentry: [],
       collision: []
     };
+
     this.maxParticles = 2500;
     this.maxCollisionsPerFrame = 3;
-    this.maxSubSteps = 50;   // Increased to support up to 86400x time warp
+    this.maxSubSteps = 50;   // Supports up to 86400x time warp
     this.maxStepDt = 30.0;   // Verlet integration is stable up to 30s for LEO
 
-    // Sector cooldowns to prevent localized re-explosion storms
-    this.sectorCooldowns = new Map();
-    this.lastCollisionTime = 0;
-    this.minCollisionIntervalMs = 40;
+    // Anti-duplicate collision parameters
+    this.minRelativeVelocityKmS = 0.5;   // Minimum 500 m/s relative speed for hypervelocity breakup
+    this.cooldownRadiusKm = 150.0;       // Euclidean 3D exclusion sphere around recent collisions
+    this.cooldownRealMs = 350;           // Real-time cooldown (ms)
+    this.cooldownSimSec = 15.0;          // Simulation-time cooldown (sim seconds)
+
+    this.simTimeSec = 0;
+    this.substepCounter = 0;
+    this.recentCollisions = [];          // [{ x, y, z, simTime, realTime }]
+    this.destroyedSatelliteIds = new Set(); // Deduplicates catalog strikes
 
     this.stats = {
       collisions: 0,
@@ -47,39 +60,39 @@ export class KesslerSimulator {
   }
 
   /**
-   * Resets all particles, cooldowns and statistics
+   * Resets all particles, cooldowns, destroyed-satellite ledger, and statistics
    */
   reset() {
     this.particles = [];
-    this.sectorCooldowns.clear();
+    this.spatialHash.clear();
+    this.recentCollisions = [];
+    this.destroyedSatelliteIds.clear();
+    this.simTimeSec = 0;
+    this.substepCounter = 0;
     this.stats.collisions = 0;
     this.stats.destroyedSatellites = 0;
     this.stats.totalFragments = 0;
   }
 
   /**
-   * Adds a single debris particle to the simulation
+   * Creates a normalized particle object without mutating `this.particles` directly
    */
-  addParticle(particle, sourceId = null, generation = 0, rootSourceId = null) {
-    if (this.particles.length >= this.maxParticles) {
-      this.particles.shift();
-    }
+  _createParticle(particle, sourceId = null, generation = 0, rootSourceId = null) {
+    const assignedSourceId = particle.sourceId || sourceId || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    const assignedSourceId = particle.sourceId || sourceId || `src_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    
-    let assignedRootIds = [];
+    let assignedRootIds;
     if (particle.rootSourceIds) {
-      assignedRootIds = particle.rootSourceIds;
+      assignedRootIds = Array.isArray(particle.rootSourceIds) ? particle.rootSourceIds : [particle.rootSourceIds];
     } else if (rootSourceId) {
       assignedRootIds = Array.isArray(rootSourceId) ? rootSourceId : [rootSourceId];
     } else {
       assignedRootIds = [assignedSourceId];
     }
 
-    const p = {
-      id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    return {
+      id: `p_${this.stats.totalFragments}_${Math.random().toString(36).slice(2, 6)}`,
       sourceId: assignedSourceId,
-      rootSourceIds: assignedRootIds, // Array of ancestor root IDs to prevent incestuous cascades
+      rootSourceIds: assignedRootIds,
       generation: particle.generation !== undefined ? particle.generation : generation,
       position: { ...particle.position },
       velocity: { ...particle.velocity },
@@ -87,9 +100,19 @@ export class KesslerSimulator {
       size: particle.size ?? 0.2,
       areaToMass: particle.areaToMass ?? 0.02,
       category: particle.category || 'sim_debris',
-      immuneTimer: particle.immuneTimer ?? 1.0
+      immuneTimer: particle.immuneTimer ?? 1.0,
+      bornSubstep: this.substepCounter
     };
+  }
 
+  /**
+   * Adds a single debris particle to the simulation (safe outside substep index loops)
+   */
+  addParticle(particle, sourceId = null, generation = 0, rootSourceId = null) {
+    const p = this._createParticle(particle, sourceId, generation, rootSourceId);
+    if (this.particles.length >= this.maxParticles) {
+      this.particles.shift();
+    }
     this.particles.push(p);
     this.stats.totalFragments++;
     return p;
@@ -99,8 +122,8 @@ export class KesslerSimulator {
    * Triggers an explosion on an existing object or position.
    */
   triggerExplosion(position, velocity, targetMass = 500, fragmentCount = 50, energyScale = 1.0, rootId = null) {
-    const cappedCount = Math.min(fragmentCount, 150);
-    const explosionSourceId = rootId || `root_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const cappedCount = Math.max(10, Math.min(Math.round(fragmentCount) || 50, 200));
+    const explosionSourceId = rootId || `root_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
     const parentObj = {
       mass: targetMass,
@@ -111,7 +134,7 @@ export class KesslerSimulator {
     const newFrags = BreakupModel.explode(parentObj, 1e8 * energyScale, cappedCount, 'explosion');
 
     for (const f of newFrags) {
-      f.immuneTimer = 1.0; // 1.0s expansion before hitting other objects
+      f.immuneTimer = 2.0; // Initial expansion grace before external strikes
       this.addParticle(f, explosionSourceId, 1, explosionSourceId);
     }
 
@@ -120,24 +143,82 @@ export class KesslerSimulator {
   }
 
   /**
-   * Steps all particles forward in time by dtSec.
-   * Checks collisions among particles AND against catalog satellites.
+   * Checks whether a candidate collision position is inside the exclusion sphere
+   * of any recent collision (using BOTH real-time and simulation-time windows).
    */
-  step(dtSec, catalogCollisionCheckFn = null) {
-    const totalDt = Math.min(dtSec, this.maxSubSteps * this.maxStepDt);
-    const numSubSteps = Math.ceil(totalDt / this.maxStepDt);
-    const subDt = totalDt / numSubSteps;
-
-    // Clean up expired sector cooldowns periodically
-    const nowTime = performance.now();
-    if (this.sectorCooldowns.size > 200) {
-      for (const [key, expires] of this.sectorCooldowns.entries()) {
-        if (expires < nowTime) this.sectorCooldowns.delete(key);
+  _isInCollisionCooldown(pos, nowRealMs) {
+    const rSq = this.cooldownRadiusKm * this.cooldownRadiusKm;
+    for (let i = this.recentCollisions.length - 1; i >= 0; i--) {
+      const rc = this.recentCollisions[i];
+      const realExpired = (nowRealMs - rc.realTime) >= this.cooldownRealMs;
+      const simExpired = (this.simTimeSec - rc.simTime) >= this.cooldownSimSec;
+      if (realExpired && simExpired) {
+        this.recentCollisions.splice(i, 1);
+        continue;
+      }
+      const dx = pos.x - rc.x;
+      const dy = pos.y - rc.y;
+      const dz = pos.z - rc.z;
+      if (dx * dx + dy * dy + dz * dz <= rSq) {
+        return true;
       }
     }
+    return false;
+  }
+
+  _recordCollisionCooldown(pos, nowRealMs) {
+    this.recentCollisions.push({
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      simTime: this.simTimeSec,
+      realTime: nowRealMs
+    });
+    if (this.recentCollisions.length > 100) {
+      this.recentCollisions.splice(0, this.recentCollisions.length - 100);
+    }
+  }
+
+  _sharesRootLineage(pA, pB) {
+    const rootsA = pA.rootSourceIds;
+    const rootsB = pB.rootSourceIds;
+    if (!rootsA || !rootsB) return false;
+    for (let i = 0; i < rootsA.length; i++) {
+      if (rootsB.includes(rootsA[i])) return true;
+    }
+    return false;
+  }
+
+  _relativeSpeedSq(vA, vB) {
+    const dvx = vA.vx - vB.vx;
+    const dvy = vA.vy - vB.vy;
+    const dvz = vA.vz - vB.vz;
+    return dvx * dvx + dvy * dvy + dvz * dvz;
+  }
+
+  /**
+   * Steps all particles forward in time by dtSec.
+   * Enforces maxCollisionsPerFrame across ALL substeps in this frame.
+   */
+  step(dtSec, catalogCollisionCheckFn = null) {
+    if (!Number.isFinite(dtSec) || dtSec <= 0) {
+      return {
+        count: this.particles.length,
+        collisions: this.stats.collisions,
+        destroyedSatellites: this.stats.destroyedSatellites
+      };
+    }
+
+    const totalDt = Math.min(dtSec, this.maxSubSteps * this.maxStepDt);
+    const numSubSteps = Math.max(1, Math.ceil(totalDt / this.maxStepDt));
+    const subDt = totalDt / numSubSteps;
+
+    // Shared collision budget across all substeps in this animation frame
+    const frameBudget = { count: 0 };
 
     for (let s = 0; s < numSubSteps; s++) {
-      this._substep(subDt, catalogCollisionCheckFn);
+      this.substepCounter++;
+      this._substep(subDt, catalogCollisionCheckFn, frameBudget);
     }
 
     return {
@@ -147,15 +228,8 @@ export class KesslerSimulator {
     };
   }
 
-  _getSectorKey(pos) {
-    // 120 km sector grid
-    const sx = Math.floor(pos.x / 120.0);
-    const sy = Math.floor(pos.y / 120.0);
-    const sz = Math.floor(pos.z / 120.0);
-    return `${sx},${sy},${sz}`;
-  }
-
-  _substep(dtSec, catalogCollisionCheckFn) {
+  _substep(dtSec, catalogCollisionCheckFn, frameBudget) {
+    this.simTimeSec += dtSec;
     const reenteredIndices = [];
     const nowTime = performance.now();
 
@@ -179,118 +253,123 @@ export class KesslerSimulator {
       this.particles.splice(reenteredIndices[i], 1);
     }
 
+    // Skip collision checks completely if frame collision budget is already exhausted
+    if (frameBudget.count >= this.maxCollisionsPerFrame) {
+      return;
+    }
+
     const toRemove = new Set();
-    let processedCount = 0;
+    const spawnQueue = [];
+    const minRelSpeedSq = this.minRelativeVelocityKmS * this.minRelativeVelocityKmS;
+    // Immunity lasts at least 12 sim seconds AND > 1 full substep so newly spawned clouds disperse first
+    const spawnImmunitySec = Math.max(12.0, dtSec * 1.5);
 
     // ─────────────────────────────────────────────────────────────
     // 2. PRIORITIZED: Particle-to-Catalog-Satellite Collision Check
     // ─────────────────────────────────────────────────────────────
     if (catalogCollisionCheckFn) {
       for (let i = 0; i < this.particles.length; i++) {
-        if (processedCount >= this.maxCollisionsPerFrame) break;
+        if (frameBudget.count >= this.maxCollisionsPerFrame) break;
         if (toRemove.has(i)) continue;
 
         const p = this.particles[i];
-        if (!p || p.immuneTimer > 0) continue;
+        if (!p || p.immuneTimer > 0 || p.bornSubstep === this.substepCounter) continue;
 
-        const sectorKey = this._getSectorKey(p.position);
-        if (this.sectorCooldowns.get(sectorKey) > nowTime) continue;
+        if (this._isInCollisionCooldown(p.position, nowTime)) continue;
 
-        // Query real satellite in matching altitude shell within 45km
+        // Query real satellite within 45km
         const struckSatellite = catalogCollisionCheckFn(p.position, 45.0);
-        if (struckSatellite) {
-          toRemove.add(i);
+        if (!struckSatellite) continue;
 
-          const struckRootId = `root_sat_${struckSatellite.NORAD_CAT_ID || struckSatellite.index}_${Date.now()}`;
-          const targetMass = struckSatellite.rcsSize === 'LARGE' ? 1800 : (struckSatellite.rcsSize === 'MEDIUM' ? 500 : 120);
+        // Deduplicate catalog strikes: a satellite can NEVER be destroyed twice
+        const satUniqueKey = struckSatellite.NORAD_CAT_ID != null
+          ? `norad_${struckSatellite.NORAD_CAT_ID}`
+          : `idx_${struckSatellite.index}`;
+        if (this.destroyedSatelliteIds.has(satUniqueKey)) continue;
 
-          // Use real orbital velocity of the struck satellite
-          const satVel = struckSatellite.velocity || {
-            vx: -p.velocity.vx * 0.7,
-            vy: p.velocity.vy * 0.7,
-            vz: -p.velocity.vz * 0.7
-          };
+        // Use real orbital velocity of the struck satellite
+        const satVel = struckSatellite.velocity || {
+          vx: -p.velocity.vx * 0.7,
+          vy: p.velocity.vy * 0.7,
+          vz: -p.velocity.vz * 0.7
+        };
 
-          const satObj = {
-            mass: targetMass,
-            position: { ...p.position },
-            velocity: satVel
-          };
+        // Require genuine hypervelocity relative speed
+        if (this._relativeSpeedSq(p.velocity, satVel) < minRelSpeedSq) continue;
 
-          // Generate hypervelocity collision breakup fragments
-          const combinedRoots = Array.from(new Set([...(p.rootSourceIds || []), struckRootId])).slice(0, 5);
-          const frags = BreakupModel.collide(p, satObj, 24);
-          
-          for (const f of frags) {
-            f.immuneTimer = 0.8;
-            // The newly created fragments inherit BOTH lineages
-            this.addParticle(f, struckRootId, (p.generation || 1) + 1, combinedRoots);
-          }
+        this.destroyedSatelliteIds.add(satUniqueKey);
+        toRemove.add(i);
 
-          this.stats.collisions++;
-          this.stats.destroyedSatellites++;
-          this.lastCollisionTime = nowTime;
-          this.sectorCooldowns.set(sectorKey, nowTime + 300);
+        const struckRootId = `root_sat_${struckSatellite.NORAD_CAT_ID || struckSatellite.index}`;
+        const targetMass = struckSatellite.rcsSize === 'LARGE' ? 1800 : (struckSatellite.rcsSize === 'MEDIUM' ? 500 : 120);
 
-          this.emit('collision', {
-            position: p.position,
-            objA: p,
-            objB: struckSatellite,
-            satelliteIndex: struckSatellite.index,
-            satelliteName: struckSatellite.name || struckSatellite.OBJECT_NAME || `NORAD ${struckSatellite.NORAD_CAT_ID}`,
-            newFragments: frags.length,
-            totalCollisions: this.stats.collisions,
-            destroyedSatellites: this.stats.destroyedSatellites
-          });
+        const satObj = {
+          mass: targetMass,
+          position: { ...p.position },
+          velocity: satVel
+        };
 
-          processedCount++;
+        // Inherit BOTH projectile lineage and struck satellite lineage (up to 12 ancestors)
+        const combinedRoots = Array.from(new Set([...(p.rootSourceIds || []), struckRootId])).slice(0, 12);
+        const frags = BreakupModel.collide(p, satObj, 24);
+        const nextGen = (p.generation || 1) + 1;
+
+        for (const f of frags) {
+          f.immuneTimer = spawnImmunitySec;
+          spawnQueue.push(this._createParticle(f, struckRootId, nextGen, combinedRoots));
+        }
+
+        this.stats.collisions++;
+        this.stats.destroyedSatellites++;
+        this._recordCollisionCooldown(p.position, nowTime);
+        frameBudget.count++;
+
+        this.emit('collision', {
+          position: { ...p.position },
+          objA: p,
+          objB: struckSatellite,
+          satelliteIndex: struckSatellite.index,
+          satelliteName: struckSatellite.name || struckSatellite.OBJECT_NAME || `NORAD ${struckSatellite.NORAD_CAT_ID}`,
+          newFragments: frags.length,
+          totalCollisions: this.stats.collisions,
+          destroyedSatellites: this.stats.destroyedSatellites
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Multi-Source Inter-Debris Collision Detection (Swept + Backward CPA)
+    // ─────────────────────────────────────────────────────────────
+    if (frameBudget.count < this.maxCollisionsPerFrame && this.particles.length >= 2) {
+      this.spatialHash.clear();
+      for (let i = 0; i < this.particles.length; i++) {
+        const p = this.particles[i];
+        if (!toRemove.has(i) && p.immuneTimer <= 0 && p.bornSubstep !== this.substepCounter) {
+          this.spatialHash.insertSwept(i, p.position, p.velocity, dtSec);
         }
       }
-    }
 
-    // ─────────────────────────────────────────────────────────────
-    // 3. Multi-Source Inter-Debris Collision Detection (with CPA)
-    // ─────────────────────────────────────────────────────────────
-    this.spatialHash.clear();
-    for (let i = 0; i < this.particles.length; i++) {
-      if (!toRemove.has(i) && this.particles[i].immuneTimer <= 0) {
-        this.spatialHash.insert(i, this.particles[i].position);
-      }
-    }
+      const positions = this.particles.map(p => p.position);
+      const velocities = this.particles.map(p => p.velocity);
+      const collisions = this.spatialHash.findCollisions(positions, 36.0, velocities, dtSec);
 
-    const positions = this.particles.map(p => p.position);
-    const velocities = this.particles.map(p => p.velocity);
-    const collisions = this.spatialHash.findCollisions(positions, 36.0, velocities, dtSec);
-
-    if (collisions.length > 0) {
-      for (const [idxA, idxB] of collisions) {
-        if (processedCount >= this.maxCollisionsPerFrame) break;
+      for (let c = 0; c < collisions.length; c++) {
+        if (frameBudget.count >= this.maxCollisionsPerFrame) break;
+        const [idxA, idxB] = collisions[c];
         if (toRemove.has(idxA) || toRemove.has(idxB)) continue;
 
         const pA = this.particles[idxA];
         const pB = this.particles[idxB];
         if (!pA || !pB) continue;
 
-        // CRITICAL RULE: ROOT-SIBLING SKIP
-        // Fragments derived from ANY common original parent satellite NEVER collide!
-        let sharesRoot = false;
-        if (pA.rootSourceIds && pB.rootSourceIds) {
-          for (const rA of pA.rootSourceIds) {
-            if (pB.rootSourceIds.includes(rA)) {
-              sharesRoot = true;
-              break;
-            }
-          }
-        }
-        if (sharesRoot) {
-          continue;
-        }
+        // CRITICAL RULE 1: ROOT-SIBLING SKIP (never collide if sharing ANY common ancestor)
+        if (this._sharesRootLineage(pA, pB)) continue;
 
-        // Sector Cooldown: Max 1 collision per 120km sector every 300ms
-        const sectorKey = this._getSectorKey(pA.position);
-        if (this.sectorCooldowns.get(sectorKey) > nowTime) {
-          continue;
-        }
+        // CRITICAL RULE 2: HYPERVELOCITY RELATIVE SPEED GATE (no low-speed grazing self-explosions)
+        if (this._relativeSpeedSq(pA.velocity, pB.velocity) < minRelSpeedSq) continue;
+
+        // CRITICAL RULE 3: PROXIMITY HYBRID COOLDOWN (both real-time and sim-time, zero grid-edge leaks)
+        if (this._isInCollisionCooldown(pA.position, nowTime)) continue;
 
         // Generation Cap: Up to 10 cascade generations
         const genA = pA.generation || 1;
@@ -300,41 +379,50 @@ export class KesslerSimulator {
         toRemove.add(idxA);
         toRemove.add(idxB);
 
-        // Merge root lineages (limit to 5 to prevent unbounded growth)
-        const combinedRoots = Array.from(new Set([...(pA.rootSourceIds || []), ...(pB.rootSourceIds || [])])).slice(0, 5);
+        const combinedRoots = Array.from(new Set([...(pA.rootSourceIds || []), ...(pB.rootSourceIds || [])])).slice(0, 12);
         const nextGen = Math.max(genA, genB) + 1;
         const frags = BreakupModel.collide(pA, pB, 18);
 
         for (const f of frags) {
-          f.immuneTimer = 0.8;
-          this.addParticle(f, null, nextGen, combinedRoots);
+          f.immuneTimer = spawnImmunitySec;
+          spawnQueue.push(this._createParticle(f, null, nextGen, combinedRoots));
         }
 
         this.stats.collisions++;
-        this.lastCollisionTime = nowTime;
-        this.sectorCooldowns.set(sectorKey, nowTime + 300);
+        this._recordCollisionCooldown(pA.position, nowTime);
+        frameBudget.count++;
 
         this.emit('collision', {
-          position: pA.position,
+          position: { ...pA.position },
           objA: pA,
           objB: pB,
           newFragments: frags.length,
           totalCollisions: this.stats.collisions
         });
-
-        processedCount++;
       }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Remove collided parent particles
+    // 4. Remove collided parent particles FIRST, then flush spawnQueue cleanly
+    //    (Guarantees ZERO index shifting corruption!)
     // ─────────────────────────────────────────────────────────────
     if (toRemove.size > 0) {
       const removeSorted = Array.from(toRemove).sort((a, b) => b - a);
-      for (const idx of removeSorted) {
+      for (let i = 0; i < removeSorted.length; i++) {
+        const idx = removeSorted[i];
         if (idx < this.particles.length) {
           this.particles.splice(idx, 1);
         }
+      }
+    }
+
+    if (spawnQueue.length > 0) {
+      for (let i = 0; i < spawnQueue.length; i++) {
+        this.particles.push(spawnQueue[i]);
+        this.stats.totalFragments++;
+      }
+      if (this.particles.length > this.maxParticles) {
+        this.particles.splice(0, this.particles.length - this.maxParticles);
       }
     }
   }
